@@ -1,0 +1,10 @@
+*.txt
+
+# Exclude non-essential files related to LaTeX
+*.aux
+*.log
+*.synctex.gz
+*.out
+*.toc
+*.tex
+*.pdf
