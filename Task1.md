@@ -16,7 +16,7 @@ Submission by Jiahui Dai and Yana Halamakh
 
 
 ## Development of ER diagram and description
-[ER Diagram](ER-diagram.drawio.png)
+![ER Diagram](ER-diagram.drawio.png)
 
 This ER diagram models the relationships between Users, Books, Authors, Genres, and Publishers.
 - Users can register their account and provide their name and contact details.
