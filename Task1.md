@@ -1,6 +1,7 @@
 # Task 1 - Conceptual Modeling: Design an ER Diagram
 Submission by Jiahui Dai and Yana Halamakh
 
+
 ## Potential improvements, features, and data requirements for managing the library efficiently
 
 1. Enhancing User Data
@@ -16,7 +17,8 @@ Submission by Jiahui Dai and Yana Halamakh
 
 
 ## Development of ER diagram and description
-![ER Diagram](ER-diagram.drawio.png)
+![ER Diagram](img/ER-diagram.drawio.png)
+[Link](ER-diagram.drawio.pdf) to PDF file
 
 This ER diagram models the relationships between Users, Books, Authors, Genres, and Publishers.
 - Users can register their account and provide their name and contact details.
