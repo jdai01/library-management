@@ -1,4 +1,8 @@
-*.txt
+# Ignore virtual environment
+*env
+
+# Ignore cache
+*.DS_Store
 
 # Exclude non-essential files related to LaTeX
 *.aux
