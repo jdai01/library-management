@@ -59,6 +59,49 @@ def get_db_connection():
 def home():
     return render_template('index.html')
 
+@app.route('/main.html')
+def index():
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            print("Unable to connect to the database")
+            return []
+        
+        cursor = conn.cursor()
+        query = """
+            SELECT 
+                b.book_id,
+                b.title,
+                string_agg(DISTINCT a.name, ', ') AS authors,
+                string_agg(DISTINCT p.name, ', ') AS publishers,
+                string_agg(DISTINCT g.name, ', ') AS genres,
+                CASE WHEN b.state != 'available' THEN u.name END AS borrower, 
+                CASE WHEN b.state != 'available' THEN bo.borrow_date END AS borrow_date,
+                CASE WHEN b.state != 'available' THEN bo.due_date END AS due_date,
+                b.state
+            FROM books b
+            LEFT JOIN book_authors ba ON ba.book_id = b.book_id
+            LEFT JOIN authors a ON a.author_id = ba.author_id
+            LEFT JOIN book_publishers bp ON bp.book_id = b.book_id
+            LEFT JOIN publishers p ON p.publisher_id = bp.publisher_id
+            LEFT JOIN book_genres bg ON bg.book_id = b.book_id
+            LEFT JOIN genres g ON g.genre_id = bg.genre_id
+            LEFT JOIN borrows bo ON bo.book_id = b.book_id
+            LEFT JOIN users u ON u.user_id = bo.user_id
+            GROUP BY b.book_id, b.title, u.name, bo.borrow_date, bo.due_date, b.state
+            ORDER BY b.book_id;
+        """
+        cursor.execute(query)  # Query to fetch all books
+        info = cursor.fetchall()  # Fetch all rows
+        
+        cursor.close()
+        conn.close()
+        
+        return render_template('main.html', info=info)
+    except DatabaseError as e:
+        print(f"Database error occurred: {e}")
+        return []
+
 # Route to serve viewer.html
 @app.route('/viewer.html')
 def viewer():
