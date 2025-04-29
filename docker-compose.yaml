@@ -40,7 +40,7 @@ services:
         container_name: app
         build: .
         volumes:
-            - .:/app
+            - ./app:/app  
         depends_on:
             - db  
         ports:

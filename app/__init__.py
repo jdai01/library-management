@@ -3,6 +3,8 @@ import configparser
 import requests
 import logging
 from flask_cors import CORS
+import psycopg2
+from psycopg2 import sql
 
 app = Flask(__name__, static_url_path='/static', static_folder='static')
 CORS(app)
@@ -20,15 +22,37 @@ logging.basicConfig(
 config = configparser.ConfigParser()
 config.read('config.ini')
 
-# Get the API key and URL from the configuration
-try:
-    GEMINI_API_KEY = config.get('API', 'GEMINI_API_KEY')
-    GEMINI_API_URL = config.get('API', 'GEMINI_API_URL')
-    logging.info("Gemini API configuration loaded successfully.")
-except Exception as e:
-    logging.error("Error reading config.ini: %s", e)
-    GEMINI_API_KEY = None
-    GEMINI_API_URL = None
+# # Get the API key and URL from the configuration
+# try:
+#     GEMINI_API_KEY = config.get('API', 'GEMINI_API_KEY')
+#     GEMINI_API_URL = config.get('API', 'GEMINI_API_URL')
+#     logging.info("Gemini API configuration loaded successfully.")
+# except Exception as e:
+#     logging.error("Error reading config.ini: %s", e)
+#     GEMINI_API_KEY = None
+#     GEMINI_API_URL = None
+
+# Database configuration
+DB_USER = config.get('DATABASE', 'DB_USER')
+DB_PASSWORD = config.get('DATABASE', 'DB_PASSWORD')
+DB_HOST = config.get('DATABASE', 'DB_HOST')
+DB_PORT = config.get('DATABASE', 'DB_PORT')
+DB_NAME = config.get('DATABASE', 'DB_NAME')
+
+def get_db_connection():
+    try:
+        conn = psycopg2.connect(
+            dbname=DB_NAME,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            host=DB_HOST,
+            port=DB_PORT
+        )
+        logging.info("Database connection successful.")
+        return conn
+    except psycopg2.Error as e:
+        logging.error(f"Database connection failed: {e}")
+        return None
 
 # Route to serve the home page
 @app.route('/')
@@ -119,5 +143,43 @@ def get_description():
         logging.exception(f"Unexpected error: {e}")
         return jsonify({'error': 'An unexpected error occurred', 'message': str(e)}), 500
 
+# Initialize the database schema
+def initialize_database():
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            logging.error("Database connection could not be established.")
+            return
+        with open('schema/schema.sql', 'r') as f:
+            schema_sql = f.read()
+        with conn.cursor() as cursor:
+            cursor.execute(schema_sql)
+            conn.commit()
+            logging.info("Database schema initialized.")
+        conn.close()
+    except Exception as e:
+        logging.error(f"Error initializing the database: {e}")
+
+# Load initial data into the database
+def load_initial_data():
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            logging.error("Database connection could not be established.")
+            return
+        with open('schema/data.sql', 'r') as f:
+            data_sql = f.read()
+        with conn.cursor() as cursor:
+            cursor.execute(data_sql)
+            conn.commit()
+            logging.info("Initial data loaded into the database.")
+        conn.close()
+    except Exception as e:
+        logging.error(f"Error loading initial data into the database: {e}")
+
 if __name__ == '__main__':
+    # Initialize and load data when app starts
+    initialize_database()
+    load_initial_data()
+
     app.run(debug=True)

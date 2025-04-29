@@ -4,16 +4,16 @@
 INSERT INTO users (name, email, tel_no) 
 VALUES
     ('Lothar Gorman', 'lothar_gorman@example.com', '(230) 865-2886'),
-    ('Jakob Hofmann', 'jakob_hofmann@example.com'),
+    ('Jakob Hofmann', 'jakob_hofmann@example.com', ''),
     ('Tadday Müller', 'tadday_mueller@example.com', '(307) 601-0688'),
-    ('Susanne Messer', 'susanne_messer@example.com'),
+    ('Susanne Messer', 'susanne_messer@example.com', ''),
     ('Jan Waltz', 'jan_waltz@example.com', '(645) 989-5053')
 ;
 
 -- Book table
 INSERT INTO books (title, state, edition, isbn, publication_year, shelf_location)
 VALUES 
-    ("Harry Potter and the Philosopher\'s Stone", 'available', 1, '9780747532743', 1997, 'A1'),
+    ('Harry Potter and the Philosopher''s Stone', 'available', 1, '9780747532743', 1997, 'A1'),
     ('Harry Potter and the Chamber of Secrets', 'available', 1, '9780747538486', 1998, 'A1'),
     ('Harry Potter and the Prisoner of Azkaban', 'available', 1, '9780747542155', 1999, 'A1'),
     ('Harry Potter and the Goblet of Fire', 'available', 1, '9780747546245', 2000, 'A1'),
@@ -94,7 +94,7 @@ VALUES
     (1, 1, '2025-03-15'),
     (2, 2, '2025-03-15'),
     (1, 3, '2025-04-20'),
-    (2, 4, '2025-04-20')
+    (2, 4, '2025-04-20'),
     (3, 8, '2025-03-15'),
     (4, 9, '2025-04-20'),
     (3, 10, '2025-03-15')
@@ -106,7 +106,7 @@ VALUES
     (1, '2025-04-30', 10.00, TRUE),
     (2, '2025-04-15', 0.00, FALSE),
     (3, '2025-04-30', 0.00, FALSE),
-    (4, '2025-05-30', 5.00, TRUE)
+    (4, '2025-05-30', 5.00, TRUE),
     (5, '2025-04-20', 5.00, TRUE), 
     (6, '2025-04-30', 0.00, FALSE), 
     (7, '2025-04-30', 10.00, TRUE)
