@@ -57,9 +57,6 @@ def get_db_connection():
 # Route to serve the home page
 @app.route('/')
 def home():
-    drop_all_tables()
-    initialize_database()
-    load_initial_data()
     return render_template('index.html')
 
 # Route to serve viewer.html
@@ -227,4 +224,9 @@ def drop_all_tables():
 #     drop_all_tables()
 
 if __name__ == '__main__':
+    # Initialising DB
+    drop_all_tables()
+    initialize_database()
+    load_initial_data()
+
     app.run(debug=True)
