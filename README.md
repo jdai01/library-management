@@ -8,9 +8,31 @@ Database Systems and Big Data Technologies Practical
 4. [Recommendation System (Neo4j)](content/Task4.md)
 
 
-<!-- Load docker   
-docker exec -it container-pg psql -U admin -d postgres
+## Installation Guide
+1. Clone Repository
+    ```bash
+    git clone https://github.com/jdai01/library_management
+    cd library_management
+    ```
 
-Load site
-http://localhost:5050/browser/ -->
+2. Build the App Images
+    ```bash
+    docker compose build
+    ```
 
+3. Start the App Containers
+    ```bash
+    docker compose up
+    ```
+
+4. Access Interfaces
+    - PostgreSQL Adminer Interface:  
+        View and manage your database in the browser: [Click here](http://127.0.0.1:8080/?pgsql=library)
+
+    - Library App Interface:  
+        Access the main Flask application: [Click here](http://127.0.0.1:5001)
+
+5. Stop and Remove Containers
+    ```bash
+    docker compose down
+    ```

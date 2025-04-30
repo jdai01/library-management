@@ -1,3 +1,5 @@
+# Installation Guide
+
 builds the app images
 ```bash
 docker compose build
@@ -13,18 +15,6 @@ stop and remove containers
 docker compose down
 ```
 
-<!-- docker build -t library_management . -->
-
-<!-- docker run -p 5001:5000 library_management -->
-
-<!-- docker compose up -->
-
-<!-- docker compose run app bash
-
-    flask shell
-        db.create_all() -->
-
-
-
-[Database](http://127.0.0.1:8080/?pgsql=library)  
-[Interface](http://127.0.0.1:5001)
+Links to access interfaces
+- [Database](http://127.0.0.1:8080/?pgsql=library)  
+- [Interface](http://127.0.0.1:5001)
