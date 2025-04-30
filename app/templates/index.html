@@ -170,16 +170,6 @@
 
     <!-- Link to External JS -->
     <!-- <script src="/static/js/index.js"></script> -->
+    <script src="/static/js/script.js"></script>
 </body>
-<script>
-    // Set the default date to today's date
-    document.getElementById('borrowDate').value = new Date().toISOString().split('T')[0];
-    document.getElementById('returnDate').value = new Date().toISOString().split('T')[0];
-
-    document.getElementById('reset').addEventListener('submit', function(e) {
-        if (!confirm('Are you sure you want to clear all borrowing data?')) {
-            e.preventDefault();
-        }
-    });
-  </script>
 </html>
