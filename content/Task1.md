@@ -1,6 +1,4 @@
 # Task 1 - Conceptual Modeling: Design an ER Diagram
-Submission by Jiahui Dai and Yana Halamakh
-
 
 ## Potential improvements, features, and data requirements for managing the library efficiently
 
