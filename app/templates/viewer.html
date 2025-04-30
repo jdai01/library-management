@@ -13,11 +13,47 @@
         <!-- Content Area -->
         <div id="content">
             <!-- Book details will be injected here -->
+            <h1>{{ heading }} Details</h1>
+            {% if info.items %}
+                <ul>
+                    {% for key, value in info.items() %}
+                        {% if key != 'Status' %}
+                            <li><b>{{ key }}:</b>
+                                {% if key in ['Author', 'Publisher', 'Genre'] %}
+                                    {% if value and value.items %}
+                                        {% for key2, value2 in value.items() %}
+                                            <a href="viewer.html?type={{ key|lower }}&id={{ key2 }}" target="_blank">
+                                                {{ value2 }}
+                                            </a>{% if not loop.last %}, {% endif %}
+                                        {% endfor %}
+                                    {% else %}
+                                        Unknown
+                                    {% endif %}
+                                {% else %}
+                                    {{ value }}
+                                {% endif %}
+                            </li>
+                        {% endif %}
+                    {% endfor %}
+                </ul>
+
+                <!-- Extra information for books -->
+                {% if heading == 'Book' %}
+                    {% if info['Status'] %}
+                        The book is available.
+                    {% else %}
+                        The book is currently not available.
+                    {% endif %}
+                {% endif %}
+            {% else %}
+                <p>No data found.</p>
+            {% endif %}
         </div>
 
         <!-- Description Section -->
         <div id="description">
             <!-- Description from Gemini API will be injected here -->
+            <p>No description available.</p>
         </div>
 
         <!-- Back to Catalog Link -->
@@ -27,7 +63,7 @@
     <!-- Include Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/dompurify@2.4.0/dist/purify.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="/static/js/viewer.js"></script>
+    <!-- <script src="/static/js/viewer.js"></script> -->
 </body>
 
 </html>

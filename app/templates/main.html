@@ -28,16 +28,58 @@
             <tbody id="book-table">
                 <!-- Book entries will be populated here -->
                 {% for i in info %}
-                <tr>
-                    <td>{{ i[0] }}</td> <!-- book_id -->
-                    <td>{{ i[1] }}</td> <!-- title -->
-                    <td>{{ i[2] }}</td> <!-- author -->
-                    <td>{{ i[3] }}</td> <!-- publisher -->
-                    <td>{{ i[4] }}</td> <!-- genre -->
+                <tr {% if not i[8] %} class="borrowed"{% endif %}>
+                    <!-- book_id -->
+                    <td>{{ i[0] }}</td> 
+
+                    <!-- title -->
+                    <td>
+                        <a href="viewer.html?type=book&id={{ i[0] }}" target="_blank">
+                            {{ i[1] }}
+                        </a>
+                    </td> 
+
+                    <!-- author -->
+                    <td>
+                        {% if i[2] %}
+                            {% for key, value in i[2].items() %}
+                                <a href="viewer.html?type=author&id={{ key }}" target="_blank">
+                                    {{ value }}
+                                </a>{% if not loop.last %}, {% endif %}
+                            {% endfor %}
+                        {% else %}
+                            Unknown
+                        {% endif %}
+                    </td>
+
+                    <!-- publisher -->
+                    <td>
+                        {% if i[3] %}
+                            {% for key, value in i[3].items() %}
+                                <a href="viewer.html?type=publisher&id={{ key }}" target="_blank">
+                                    {{ value }}
+                                </a>{% if not loop.last %}, {% endif %}
+                            {% endfor %}
+                        {% else %}
+                            Unknown
+                        {% endif %}
+                    </td>
+                    <!-- genre -->
+                    <td>                        
+                        {% if i[4] %}
+                            {% for key, value in i[4].items() %}
+                                <a href="viewer.html?type=genre&id={{ key }}" target="_blank">
+                                    {{ value }}
+                                </a>{% if not loop.last %}, {% endif %}
+                            {% endfor %}
+                        {% else %}
+                            Unknown
+                        {% endif %}
+                    </td>
                     <td>{{ i[5] or "—" }}</td> <!-- borrower -->
                     <td>{{ i[6] or "—" }}</td> <!-- borrow_date -->
                     <td>{{ i[7] or "—" }}</td> <!-- due_date -->
-                    <td>{{ i[8] }}</td> <!-- state -->
+                    <td>{{ 'Available' if i[8] else 'Not Available' }}</td> <!-- state -->
                 </tr>
                 {% endfor %}
             </tbody>
@@ -53,10 +95,22 @@
                     <select id="borrowBookId" required>
                         <option value="">Select a Book</option>
                         <!-- Options will be populated dynamically -->
+                        {% for i in info %}
+                            {% if i[8] %}
+                                <option value="{{ i[0] }}">{{ i[1] }}</option>
+                            {% endif %}
+                        {% endfor %}
                     </select>
 
                     <label for="borrowerName">Borrower's Name:</label>
-                    <input type="text" id="borrowerName" required>
+                    <!-- <input type="text" id="borrowerName" required> -->
+                    <select id="borrowerName" required>
+                        <option value="" disabled selected>Select a user</option>
+                        <!-- Options will be populated dynamically -->
+                        {% for user in users %}
+                            <option value="{{ user[0] }}">{{ user[1] }}</option>
+                        {% endfor %}
+                    </select>
 
                     <label for="borrowDate">Borrow Date:</label>
                     <input type="date" id="borrowDate" required>
@@ -71,8 +125,11 @@
                 <form id="returnForm">
                     <label for="returnBookId">Book:</label>
                     <select id="returnBookId" required>
-                        <option value="">Select a Book</option>
+                        <option value="" disabled selected>Select a Book</option>
                         <!-- Options will be populated dynamically -->
+                        {% for ub in unavailable_books %}
+                            <option value="{{ ub[0] }}">{{ ub[1] }}</option>
+                        {% endfor %}
                     </select>
 
                     <label for="returnDate">Return Date:</label>
@@ -92,5 +149,9 @@
     <!-- Link to External JS -->
     <!-- <script src="/static/js/index.js"></script> -->
 </body>
-
+<script>
+    // Set the default date to today's date
+    document.getElementById('borrowDate').value = new Date().toISOString().split('T')[0];
+    document.getElementById('returnDate').value = new Date().toISOString().split('T')[0];
+  </script>
 </html>

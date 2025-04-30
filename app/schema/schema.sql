@@ -11,7 +11,7 @@ CREATE TABLE users (
 CREATE TABLE books (
     book_id SERIAL PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
-    state VARCHAR(13) CHECK (state IN ('borrowed', 'available', 'not available')) NOT NULL,
+    is_available BOOLEAN NOT NULL DEFAULT TRUE,
     edition INT,
     isbn VARCHAR(20) UNIQUE NOT NULL,
     publication_year INT,

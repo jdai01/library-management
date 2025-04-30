@@ -96,11 +96,11 @@ th:last-child, td:last-child {
 
 /* Highlight Borrowed Books */
 .borrowed {
-    background-color: #fff3cd;
+    background-color: #fff3cd !important;
 }
 
 .borrowed:hover {
-    background-color: #ffeeba;
+    background-color: #ffeeba !important;
 }
 
 /* ==========================================================================
