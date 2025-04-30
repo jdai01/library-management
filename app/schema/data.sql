@@ -11,18 +11,18 @@ VALUES
 ;
 
 -- Book table
-INSERT INTO books (title, is_available, edition, isbn, publication_year, shelf_location)
+INSERT INTO books (title, edition, isbn, publication_year, shelf_location)
 VALUES 
-    ('Harry Potter and the Philosopher''s Stone', TRUE, 1, '9780747532743', 1997, 'A1'),
-    ('Harry Potter and the Chamber of Secrets', TRUE, 1, '9780747538486', 1998, 'A1'),
-    ('Harry Potter and the Prisoner of Azkaban', TRUE, 1, '9780747542155', 1999, 'A1'),
-    ('Harry Potter and the Goblet of Fire', TRUE, 1, '9780747546245', 2000, 'A1'),
-    ('Harry Potter and the Order of the Phoenix', TRUE, 1, '9780747551003', 2003, 'A1'),
-    ('Harry Potter and the Half-Blood Prince', TRUE, 1, '9780747581086', 2005, 'A1'),
-    ('Harry Potter and the Deathly Hallows', FALSE, 1, '9780747591054', 2007, 'A1'),
-    ('Crazy Rich Asians', TRUE, 1, '9780385537447', 2013, 'B2'),
-    ('China Rich Girlfriend', TRUE, 1, '9780385537478', 2015, 'B2'),
-    ('Rich People Problems', FALSE, 1, '9780385537485', 2017, 'B2');
+    ('Harry Potter and the Philosopher''s Stone', 1, '9780747532743', 1997, 'A1'),
+    ('Harry Potter and the Chamber of Secrets', 1, '9780747538486', 1998, 'A1'),
+    ('Harry Potter and the Prisoner of Azkaban', 1, '9780747542155', 1999, 'A1'),
+    ('Harry Potter and the Goblet of Fire', 1, '9780747546245', 2000, 'A1'),
+    ('Harry Potter and the Order of the Phoenix', 1, '9780747551003', 2003, 'A1'),
+    ('Harry Potter and the Half-Blood Prince', 1, '9780747581086', 2005, 'A1'),
+    ('Harry Potter and the Deathly Hallows', 1, '9780747591054', 2007, 'A1'),
+    ('Crazy Rich Asians', 1, '9780385537447', 2013, 'B2'),
+    ('China Rich Girlfriend', 1, '9780385537478', 2015, 'B2'),
+    ('Rich People Problems', 1, '9780385537485', 2017, 'B2');
 ;
 
 -- Author table

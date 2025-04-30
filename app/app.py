@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, redirect
 import configparser
 import requests
 import logging
@@ -6,6 +6,8 @@ from flask_cors import CORS
 import psycopg2
 from psycopg2 import OperationalError, DatabaseError
 from collections import defaultdict
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
 
 app = Flask(__name__, static_url_path='/static', static_folder='static')
 CORS(app)
@@ -55,154 +57,188 @@ def get_db_connection():
         logging.error(f"Database connection failed: {e}")
         return None
 
-# Route to serve the home page
-@app.route('/')
-def home():
-    # Initialising DB
-    drop_all_tables()
-    initialize_database()
-    load_initial_data()
-
-    return render_template('index.html')
-
-@app.route('/index.html')
-def index():
-    return render_template('index.html')
-
-@app.route('/main.html')
-def main():
+# Initialize the database schema
+def initialize_database():
+    conn = None
+    cursor = None
     try:
         conn = get_db_connection()
         if conn is None:
-            print("Unable to connect to the database")
-            return []
-        
+            logging.error("Database connection could not be established.")
+            return
+
         cursor = conn.cursor()
-        query = """
+        schema_sql = 'schema/schema.sql'
+        data_sql = 'schema/data.sql'
+        drop_sql = 'schema/drop.sql'
+
+        for file, log_message in zip(
+            [drop_sql, schema_sql, data_sql],
+            ["All tables dropped successfully.", "Database schema initialized.", "Initial data loaded into the database."]
+        ):
+            with open(file, 'r') as f:
+                sql = f.read()
+                cursor.execute(sql)
+                logging.info(log_message)
+                conn.commit()
+
+    except Exception as e:
+        logging.error(f"Error initializing the database: {e}")
+    else:
+        logging.info("Database initialized successfully.")
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
+# Route to serve the home page
+@app.route('/')
+def initialise():
+    initialize_database()
+
+    return redirect('/index.html')
+
+
+# Book Cateloge
+@app.route('/index.html')
+def index():
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            logging.error("Unable to connect to the database")
+            return []
+
+        cursor = conn.cursor()
+
+        # Fetch book info with borrower data if unavailable
+        book_query = """
+            WITH LatestBorrows AS (
+                SELECT 
+                    bo.book_id,
+                    bo.user_id,
+                    bo.borrow_date,
+                    bo.due_date,
+                    ROW_NUMBER() OVER (PARTITION BY bo.book_id ORDER BY bo.borrow_id DESC) AS rn
+                FROM borrows bo
+                LEFT JOIN books b ON bo.book_id = b.book_id
+                WHERE b.is_available=FALSE
+            )
             SELECT 
                 b.book_id,
                 b.title,
-                CASE WHEN NOT b.is_available THEN u.name END AS borrower, 
-                CASE WHEN NOT b.is_available THEN bo.borrow_date END AS borrow_date,
-                CASE WHEN NOT b.is_available THEN bo.due_date END AS due_date,
-                b.is_available
+                b.is_available,
+                u.name AS borrower,
+                lb.borrow_date,
+                lb.due_date,
+                u.user_id
             FROM books b
-            -- LEFT JOIN book_authors ba ON ba.book_id = b.book_id
-            -- LEFT JOIN authors a ON a.author_id = ba.author_id
-            -- LEFT JOIN book_publishers bp ON bp.book_id = b.book_id
-            -- LEFT JOIN publishers p ON p.publisher_id = bp.publisher_id
-            -- LEFT JOIN book_genres bg ON bg.book_id = b.book_id
-            -- LEFT JOIN genres g ON g.genre_id = bg.genre_id
-            LEFT JOIN borrows bo ON bo.book_id = b.book_id
-            LEFT JOIN users u ON u.user_id = bo.user_id
-            GROUP BY b.book_id, b.title, u.name, bo.borrow_date, bo.due_date, b.is_available
+            LEFT JOIN LatestBorrows lb ON lb.book_id = b.book_id AND lb.rn = 1
+            LEFT JOIN users u ON u.user_id = lb.user_id
             ORDER BY b.book_id;
         """
+        cursor.execute(book_query)
+        books = cursor.fetchall()
+
+        # Fetch authors, publishers, genres
+        def fetch_and_map(query):
+            cursor.execute(query)
+            results = cursor.fetchall()
+            mapping = defaultdict(dict)
+            for book_id, entity_id, entity_name in results:
+                mapping[book_id][entity_id] = entity_name
+            return mapping
 
         author_query = """
-            SELECT 
-                b.book_id,
-                a.author_id,
-                a.name
+            SELECT b.book_id, a.author_id, a.name
             FROM books b
-            LEFT JOIN book_authors ba ON ba.book_id = b.book_id
-            LEFT JOIN authors a ON a.author_id = ba.author_id
-            ORDER BY book_id
-        """
-
-        genre_query = """
-            SELECT 
-                b.book_id,
-                g.genre_id,
-                g.name
-            FROM books b
-            LEFT JOIN book_genres bg ON bg.book_id = b.book_id
-            LEFT JOIN genres g ON g.genre_id = bg.genre_id
-            ORDER BY book_id
+            JOIN book_authors ba ON ba.book_id = b.book_id
+            JOIN authors a ON a.author_id = ba.author_id
+            ORDER BY b.book_id
         """
 
         publisher_query = """
-            SELECT 
-                b.book_id,
-                p.publisher_id,
-                p.name
+            SELECT b.book_id, p.publisher_id, p.name
             FROM books b
-            LEFT JOIN book_publishers bp ON bp.book_id = b.book_id
-            LEFT JOIN publishers p ON p.publisher_id = bp.publisher_id
-            ORDER BY book_id
+            JOIN book_publishers bp ON bp.book_id = b.book_id
+            JOIN publishers p ON p.publisher_id = bp.publisher_id
+            ORDER BY b.book_id
         """
 
+        genre_query = """
+            SELECT b.book_id, g.genre_id, g.name
+            FROM books b
+            JOIN book_genres bg ON bg.book_id = b.book_id
+            JOIN genres g ON g.genre_id = bg.genre_id
+            ORDER BY b.book_id
+        """
+
+        author_map = fetch_and_map(author_query)
+        publisher_map = fetch_and_map(publisher_query)
+        genre_map = fetch_and_map(genre_query)
+
+        # Combine all info into structured list of dicts
+        book_info = []
+        for row in books:
+            book_id, title, is_available, borrower_name, borrow_date, due_date, borrower_id = row
+            book_info.append({
+                "book_id": book_id,
+                "title": title,
+                "is_available": is_available,
+                "authors": author_map.get(book_id, {}),
+                "publishers": publisher_map.get(book_id, {}),
+                "genres": genre_map.get(book_id, {}),
+                "borrower": {borrower_id: borrower_name} if borrower_id else None,
+                "borrow_date": borrow_date,
+                "due_date": due_date,
+            })
+
+        # Get user list
         user_query = """
-            SELECT
-                u.user_id,
-                u.name
-            FROM users u
-            ORDER BY u.name
-        """
-
-        unavailable_books_query = """
             SELECT 
-                b.book_id,
-                b.title
-            FROM books b
-            WHERE b.is_available = FALSE
+                user_id, 
+                name 
+            FROM users 
+            ORDER BY name
         """
-
-        cursor.execute(query)  # Query to fetch all books
-        info = cursor.fetchall()  # Fetch all rows
-        
-        cursor.execute(author_query)
-        authors = cursor.fetchall()
-
-        cursor.execute(genre_query)
-        genres = cursor.fetchall()
-
-        cursor.execute(publisher_query)
-        publishers = cursor.fetchall()
-
-        # Group related data by book_id
-        author_map = defaultdict(dict)
-        for book_id, author_id, author_name in authors:
-            author_map[book_id][author_id] = author_name
-
-        publisher_map = defaultdict(dict)
-        for book_id, publisher_id, publisher_name in publishers:
-            publisher_map[book_id][publisher_id] = publisher_name
-
-        genre_map = defaultdict(dict)
-        for book_id, genre_id, genre_name in genres:
-            genre_map[book_id][genre_id] = genre_name
-
-        # Insert into info
-        for i in range(len(info)):
-            book_id = info[i][0]
-            info[i] = list(info[i])
-            info[i].insert(2, author_map.get(book_id, {}))
-            info[i].insert(3, publisher_map.get(book_id, {}))
-            info[i].insert(4, genre_map.get(book_id, {}))
-
-        
         cursor.execute(user_query)
         users = cursor.fetchall()
 
+        # Get unavailable books
+        unavailable_books_query = """
+            SELECT 
+                book_id, 
+                title 
+            FROM books 
+            WHERE is_available = FALSE 
+            ORDER BY title
+        """
         cursor.execute(unavailable_books_query)
         unavailable_books = cursor.fetchall()
 
+        return render_template('index.html', info=book_info, users=users, unavailable_books=unavailable_books)
 
-        cursor.close()
-        conn.close()
-        
-        return render_template('main.html', info=info, users=users, unavailable_books=unavailable_books)
     except DatabaseError as e:
         logging.error(f"Database error occurred: {e}")
         return []
 
-# Route to serve viewer.html
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
+# Route to serve viewer.html: Query for Book, Author, Publisher, Genre, 
 @app.route('/viewer.html')
 def viewer():
     type = request.args.get('type')
     id = request.args.get('id')
-
+    
+    borrower = None
     heading = type.capitalize()
 
     try: 
@@ -213,15 +249,44 @@ def viewer():
         
         cursor = conn.cursor()
 
-        if type == 'book':
-            columns = ['Title', 'Edition', 'ISBN', 'Publication Year', 'Shelf Location', 'Status']
-            query = f"""
+        columns = {
+            "book": ['Title', 'Edition', 'ISBN', 'Publication Year', 'Shelf Location', 'Status'],
+            "author": ['Name'],
+            "publisher": ["Name"],
+            "genre": ["Name"], 
+            "user": ["Name", "Email", "Tel-No"]
+        }
+
+        queries = {
+            "book": f"""
                 SELECT b.title, b.edition, b.isbn, b.publication_year, b.shelf_location, b.is_available
                 FROM books b
                 WHERE book_id = {id}
+            """,
+            "author": f"""
+                SELECT name
+                FROM authors
+                WHERE author_id = {id}
+            """,
+            "publisher": f"""
+                SELECT name
+                FROM publishers
+                WHERE publisher_id = {id}
+            """,
+            "genre": f"""
+                SELECT name
+                FROM genres
+                WHERE genre_id = {id}
+            """, 
+            "user": f"""
+                SELECT name, email, tel_no
+                FROM users
+                WHERE user_id = {id}
             """
+        }
 
-            book_author_query = f"""
+        book_specific_queries = {
+            "author": f"""
                 SELECT 
                     a.author_id,
                     a.name
@@ -230,20 +295,18 @@ def viewer():
                 LEFT JOIN authors a ON a.author_id = ba.author_id
                 WHERE b.book_id = {id}
                 ORDER BY a.name
-            """
-
-            book_publisher_query = f"""
+            """,
+            "publisher": f"""
                 SELECT 
-                    p.publisher_id,
-                    p.name
+                    g.genre_id,
+                    g.name
                 FROM books b
-                LEFT JOIN book_publishers bp ON bp.book_id = b.book_id
-                LEFT JOIN publishers p ON p.publisher_id = bp.publisher_id
+                LEFT JOIN book_genres bg ON bg.book_id = b.book_id
+                LEFT JOIN genres g ON g.genre_id = bg.genre_id
                 WHERE b.book_id = {id}
-                ORDER BY p.name
-            """
-
-            book_genre_query = f"""
+                ORDER BY g.name
+            """, 
+            "genre": f"""
                 SELECT 
                     g.genre_id,
                     g.name
@@ -253,46 +316,42 @@ def viewer():
                 WHERE b.book_id = {id}
                 ORDER BY g.name
             """
+        }
 
-        elif type == 'author':
-            columns = ['Name']
-            query = f"""
-                SELECT name
-                FROM authors
-                WHERE author_id = {id}
-            """
-        elif type == 'publisher':
-            columns = ['Name']
-            query = f"""
-                SELECT name
-                FROM publishers
-                WHERE publisher_id = {id}
-            """
-        elif type == 'genre':
-            columns = ['Name']
-            query = f"""
-                SELECT name
-                FROM genres
-                WHERE genre_id = {id}
-            """
-        
+        # Get information based on type
+        query = queries[type]
+        column = columns[type]
 
         cursor.execute(query)
         result = cursor.fetchall()
-        info = dict(zip(columns, result[0])) if result else {}
+        info = dict(zip(column, result[0])) if result else {}
 
 
         if type == 'book':
-            i = 0
-            col_list = ['Author', 'Publisher', 'Genre']
-            for q in [book_author_query, book_publisher_query, book_genre_query]:
-                cursor.execute(q)
-                r = cursor.fetchall()
-                temp_dict = dict(r)
-                # logging.info(temp_dict)
+            # Get related information for books: Author, Publisher, Genre
+            for label, query in book_specific_queries.items():
+                cursor.execute(query)
+                results = cursor.fetchall()
+                info[label.capitalize()] = dict(results) if results else {}
 
-                info[col_list[i]] = temp_dict
-                i += 1
+            # If book is not available, get borrower details
+            if not info["Status"]:
+                borrower_query = f"""
+                    SELECT u.name, u.email, u.tel_no
+                    FROM books b
+                    JOIN borrows br ON br.book_id = b.book_id
+                    JOIN users u ON br.user_id = u.user_id
+                    WHERE 
+                        b.is_available = FALSE
+                        AND b.book_id = {id}
+                    ORDER BY br.borrow_id DESC
+                    LIMIT 1
+                """
+
+                cursor.execute(borrower_query)
+                borrower_result = cursor.fetchone()
+
+                borrower = dict(zip(columns['user'], borrower_result)) if borrower_result else {}
 
         cursor.close()
         conn.close()
@@ -300,8 +359,7 @@ def viewer():
         logging.error(f"Database error occurred: {e}")
         return []
     
-
-    return render_template('viewer.html', heading=heading, info=info)
+    return render_template('viewer.html', heading=heading, info=info, borrower=borrower)
 
 # # API route to fetch description from Gemini API
 # @app.route('/api/description', methods=['GET'])
@@ -382,88 +440,119 @@ def viewer():
 #         logging.exception(f"Unexpected error: {e}")
 #         return jsonify({'error': 'An unexpected error occurred', 'message': str(e)}), 500
 
-# Initialize the database schema
-def initialize_database():
-    try:
-        conn = get_db_connection()
-        if conn is None:
-            logging.error("Database connection could not be established.")
-            return
-        with open('schema/schema.sql', 'r') as f:
-            schema_sql = f.read()
-        with conn.cursor() as cursor:
-            cursor.execute(schema_sql)
-            conn.commit()
-            logging.info("Database schema initialized.")
+
+@app.route('/borrow', methods=['POST'])
+def borrow_book():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    book_id = request.form.get('borrowBookId')
+    user_id = request.form.get('borrowerName')
+    borrow_date_str = request.form.get('borrowDate')
+
+    # Parse string to date
+    borrow_date = datetime.strptime(borrow_date_str, '%Y-%m-%d').date()
+    due_date = borrow_date + relativedelta(months=1)
+
+
+    borrow_insert_query = f"""
+        INSERT INTO borrows (user_id, book_id, borrow_date, due_date)
+        VALUES ({user_id}, {book_id}, '{borrow_date.strftime('%Y-%m-%d')}', '{due_date.strftime('%Y-%m-%d')}')
+    """
+
+    book_update_query = f"""
+        UPDATE books 
+        SET is_available = FALSE
+        WHERE book_id = {book_id}
+    """
+
+    user_update_query = f"""
+        UPDATE users 
+        SET books_borrowed = books_borrowed + 1
+        WHERE user_id = {user_id}
+    """
+
+    for query in [borrow_insert_query, book_update_query, user_update_query]:
+        cursor.execute(query)
+
+    conn.commit()
+    conn.close()
+
+    return redirect('/index.html')
+
+@app.route('/return', methods=['POST'])
+def return_book():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    book_id = request.form.get('returnBookId')
+    return_date_str = request.form.get('returnDate')
+    return_date = datetime.strptime(return_date_str, '%Y-%m-%d').date()
+
+    # Get borrow_id, due_date, user_id
+    borrow_record_query = f"""
+        SELECT
+            borrow_id,
+            user_id,
+            due_date
+        FROM borrows
+        WHERE 
+            book_id = {book_id}
+        ORDER BY borrow_id DESC
+        LIMIT 1
+    """
+    cursor.execute(borrow_record_query)
+    borrow_record = cursor.fetchone()
+
+    if not borrow_record:
         conn.close()
-    except Exception as e:
-        logging.error(f"Error initializing the database: {e}")
+        return jsonify({'error': 'No active borrow record found for this book'}), 404
 
-# Load initial data into the database
-def load_initial_data():
-    try:
-        conn = get_db_connection()
-        if conn is None:
-            logging.error("Database connection could not be established.")
-            return
-        with open('schema/data.sql', 'r') as f:
-            data_sql = f.read()
-        with conn.cursor() as cursor:
-            cursor.execute(data_sql)
-            conn.commit()
-            logging.info("Initial data loaded into the database.")
-        conn.close()
-    except Exception as e:
-        logging.error(f"Error loading initial data into the database: {e}")
-
-def drop_all_tables():
-    try:
-        conn = get_db_connection()
-        if conn is None:
-            print("Skipping drop: No DB connection.")
-            return
-        cursor = conn.cursor()
-        with open('schema/drop.sql', "r") as f:
-            cursor.execute(f.read())
-        conn.commit()
-        cursor.close()
-        conn.close()
-        logging.info("All tables dropped successfully.")
-    except DatabaseError as e:
-        logging.error(f"Error dropping tables: {e}")
-
-# Function to fetch all books
-def fetch_all_books():
-    try:
-        conn = get_db_connection()
-        if conn is None:
-            print("Unable to connect to the database")
-            return []
-        
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM books")  # Query to fetch all books
-        books = cursor.fetchall()  # Fetch all rows
-        
-        cursor.close()
-        conn.close()
-        
-        return books
-    except DatabaseError as e:
-        print(f"Database error occurred: {e}")
-        return []
-
-# Route to display books on the page
-@app.route('/books')
-def show_books():
-    books = fetch_all_books()  # Get all books from the database
-    return render_template('books.html', books=books)  # Pass books to template
+    borrow_id, user_id, due_date_str = borrow_record
+    due_date = datetime.strptime(str(due_date_str), '%Y-%m-%d').date()
 
 
-# @app.before_first_request
-# def init_app():
-#     drop_all_tables()
+    # Check for overdue
+    overdue_status = return_date > due_date
+    fine = 0.0
+    fine_amount = 1
+    if overdue_status:
+        days_late = (return_date - due_date).days
+        fine = round(days_late * fine_amount, 2) 
+
+
+    # Insert into returns
+    returns_query = f"""
+        INSERT INTO returns (borrow_id, return_date, fine, overdue_status)
+        VALUES ({borrow_id}, '{return_date.strftime('%Y-%m-%d')}', {fine}, {overdue_status})
+    """
+
+    update_book_query = f"""
+        UPDATE books
+        SET is_available = TRUE
+        WHERE book_id = {book_id}
+    """
+
+    update_user_query = f"""
+        UPDATE users
+        SET books_borrowed = books_borrowed - 1
+        WHERE user_id = {user_id}
+    """
+
+    for query in [returns_query, update_book_query, update_user_query]:
+        cursor.execute(query)
+
+
+    conn.commit()
+    conn.close()
+
+    return redirect('/index.html')
+
+@app.route('/reset', methods=['POST'])
+def reset_database():
+    # Redirect to initialise
+    return redirect('/')
+
 
 if __name__ == '__main__':
-    
-
     app.run(debug=True)

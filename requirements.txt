@@ -6,3 +6,4 @@ psycopg2-binary
 SQLAlchemy
 flask_sqlalchemy
 python-dotenv
+python-dateutil

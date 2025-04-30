@@ -21,12 +21,87 @@
                     <th>Genre</th>
                     <th>Borrower</th>
                     <th>Borrow Date</th>
-                    <th>Return Date</th>
+                    <th>Due Date</th>
                     <th>State</th>
                 </tr>
             </thead>
             <tbody id="book-table">
                 <!-- Book entries will be populated here -->
+                {% for book in info %}
+                <tr {% if not book.is_available %} class="borrowed"{% endif %}>
+                    <!-- book_id -->
+                    <td>{{ book.book_id }}</td> 
+            
+                    <!-- title -->
+                    <td>
+                        <a href="viewer.html?type=book&id={{ book.book_id }}" target="_blank">
+                            {{ book.title }}
+                        </a>
+                    </td> 
+            
+                    <!-- authors -->
+                    <td>
+                        {% if book.authors %}
+                            {% for author_id, author_name in book.authors.items() %}
+                                <a href="viewer.html?type=author&id={{ author_id }}" target="_blank">
+                                    {{ author_name }}
+                                </a>{% if not loop.last %}, {% endif %}
+                            {% endfor %}
+                        {% else %}
+                            Unknown
+                        {% endif %}
+                    </td>
+            
+                    <!-- publishers -->
+                    <td>
+                        {% if book.publishers %}
+                            {% for publisher_id, publisher_name in book.publishers.items() %}
+                                <a href="viewer.html?type=publisher&id={{ publisher_id }}" target="_blank">
+                                    {{ publisher_name }}
+                                </a>{% if not loop.last %}, {% endif %}
+                            {% endfor %}
+                        {% else %}
+                            Unknown
+                        {% endif %}
+                    </td>
+            
+                    <!-- genres -->
+                    <td>
+                        {% if book.genres %}
+                            {% for genre_id, genre_name in book.genres.items() %}
+                                <a href="viewer.html?type=genre&id={{ genre_id }}" target="_blank">
+                                    {{ genre_name }}
+                                </a>{% if not loop.last %}, {% endif %}
+                            {% endfor %}
+                        {% else %}
+                            Unknown
+                        {% endif %}
+                    </td>
+            
+                    <!-- borrower -->
+                    <td>
+                        <!-- {{ book.borrower or "—" }} -->
+                        {% if book.borrower %}
+                            {% for user_id, user_name in book.borrower.items() %}
+                                <a href="viewer.html?type=user&id={{ user_id }}" target="_blank">
+                                    {{ user_name }}
+                                </a>{% if not loop.last %}, {% endif %}
+                            {% endfor %}
+                        {% else %}
+                            {{ "—" }}
+                        {% endif %}
+                    </td>
+            
+                    <!-- borrow_date -->
+                    <td>{{ book.borrow_date or "—" }}</td>
+            
+                    <!-- due_date -->
+                    <td>{{ book.due_date or "—" }}</td>
+            
+                    <!-- availability -->
+                    <td>{{ 'Available' if book.is_available else 'Not Available' }}</td>
+                </tr>
+                {% endfor %}
             </tbody>
         </table>
 
@@ -35,18 +110,30 @@
             <!-- Borrow Form -->
             <div class="form-container">
                 <h2>Borrow Book</h2>
-                <form id="borrowForm">
+                <form id="borrowForm" method="POST" action="/borrow">
                     <label for="borrowBookId">Book:</label>
-                    <select id="borrowBookId" required>
+                    <select id="borrowBookId" name="borrowBookId" required>
                         <option value="">Select a Book</option>
                         <!-- Options will be populated dynamically -->
+                        {% for book in info %}
+                            {% if book.is_available %}
+                                <option value="{{ book.book_id }}">{{ book.title }}</option>
+                            {% endif %}
+                        {% endfor %}
                     </select>
 
                     <label for="borrowerName">Borrower's Name:</label>
-                    <input type="text" id="borrowerName" required>
+                    <!-- <input type="text" id="borrowerName" required> -->
+                    <select id="borrowerName" name="borrowerName" required>
+                        <option value="" disabled selected>Select a User</option>
+                        <!-- Options will be populated dynamically -->
+                        {% for user in users %}
+                            <option value="{{ user[0] }}">{{ user[1] }}</option>
+                        {% endfor %}
+                    </select>
 
                     <label for="borrowDate">Borrow Date:</label>
-                    <input type="date" id="borrowDate" required>
+                    <input type="date" id="borrowDate" name="borrowDate" required>
 
                     <button type="submit">Borrow Book</button>
                 </form>
@@ -55,15 +142,18 @@
             <!-- Return Form -->
             <div class="form-container">
                 <h2>Return Book</h2>
-                <form id="returnForm">
+                <form id="returnForm" method="POST" action="/return">
                     <label for="returnBookId">Book:</label>
-                    <select id="returnBookId" required>
-                        <option value="">Select a Book</option>
+                    <select id="returnBookId" name="returnBookId" required>
+                        <option value="" disabled selected>Select a Book</option>
                         <!-- Options will be populated dynamically -->
+                        {% for ub in unavailable_books %}
+                            <option value="{{ ub[0] }}">{{ ub[1] }}</option>
+                        {% endfor %}
                     </select>
 
                     <label for="returnDate">Return Date:</label>
-                    <input type="date" id="returnDate" required>
+                    <input type="date" id="returnDate" name="returnDate" required>
 
                     <button type="submit">Return Book</button>
                 </form>
@@ -72,12 +162,24 @@
 
         <!-- Clear Data Button -->
         <div class="form-container">
-            <button id="clearDataBtn">Clear All Borrowing Data</button>
-        </div>
+            <form id="reset" method="POST" action="/reset">
+                <button type="submit" id="clearDataBtn">Clear All Borrowing Data</button>
+            </form>
+        </div>        
     </div>
 
     <!-- Link to External JS -->
-    <script src="/static/js/index.js"></script>
+    <!-- <script src="/static/js/index.js"></script> -->
 </body>
+<script>
+    // Set the default date to today's date
+    document.getElementById('borrowDate').value = new Date().toISOString().split('T')[0];
+    document.getElementById('returnDate').value = new Date().toISOString().split('T')[0];
 
+    document.getElementById('reset').addEventListener('submit', function(e) {
+        if (!confirm('Are you sure you want to clear all borrowing data?')) {
+            e.preventDefault();
+        }
+    });
+  </script>
 </html>

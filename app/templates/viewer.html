@@ -30,7 +30,11 @@
                                         Unknown
                                     {% endif %}
                                 {% else %}
-                                    {{ value }}
+                                    {% if value %}
+                                        {{ value }}
+                                    {% else %}
+                                        -
+                                    {% endif %}
                                 {% endif %}
                             </li>
                         {% endif %}
@@ -40,8 +44,22 @@
                 <!-- Extra information for books -->
                 {% if heading == 'Book' %}
                     {% if info['Status'] %}
-                        The book is available.
+                        The book is available to borrow.
                     {% else %}
+                        <!-- Borrower information -->
+                        <h3>Borrower Details</h3>
+                        <ul>
+                            {% for key, value in borrower.items() %}
+                            <li><b>{{ key }}:</b>
+                                {% if value %}
+                                    {{ value }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </li>
+                            {% endfor %}
+                        </ul>
+
                         The book is currently not available.
                     {% endif %}
                 {% endif %}
