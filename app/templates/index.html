@@ -128,7 +128,7 @@
                         <option value="" disabled selected>Select a User</option>
                         <!-- Options will be populated dynamically -->
                         {% for user in users %}
-                            <option value="{{ user[0] }}">{{ user[1] }}</option>
+                            <option value="{{ user['user_id'] }}">{{ user['name'] }}</option>
                         {% endfor %}
                     </select>
 
@@ -148,7 +148,7 @@
                         <option value="" disabled selected>Select a Book</option>
                         <!-- Options will be populated dynamically -->
                         {% for ub in unavailable_books %}
-                            <option value="{{ ub[0] }}">{{ ub[1] }}</option>
+                            <option value="{{ ub['book_id'] }}">{{ ub['title'] }}</option>
                         {% endfor %}
                     </select>
 

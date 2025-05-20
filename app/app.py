@@ -205,7 +205,11 @@ def index():
             ORDER BY name
         """
         cursor.execute(user_query)
-        users = cursor.fetchall()
+        users_tuples = cursor.fetchall()
+        users = [
+            { 'user_id': u_id, 'name': name }
+            for u_id, name in users_tuples
+        ]
 
         # Get unavailable books
         unavailable_books_query = """
@@ -217,7 +221,11 @@ def index():
             ORDER BY title
         """
         cursor.execute(unavailable_books_query)
-        unavailable_books = cursor.fetchall()
+        unavailable_books_tuples = cursor.fetchall()
+        unavailable_books = [
+            { 'book_id': b_id, 'title': title }
+            for b_id, title in unavailable_books_tuples
+        ]
 
         return render_template('/index.html', info=book_info, users=users, unavailable_books=unavailable_books)
 
