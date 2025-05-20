@@ -160,257 +160,217 @@ def index():
         unavailable_books_result = session.run("MATCH (b:Book) WHERE b.is_available = false RETURN b.book_id AS book_id, b.title AS title ORDER BY title")
         unavailable_books = [{"book_id": r["book_id"], "title": r["title"]} for r in unavailable_books_result]
 
+    logging.info(users)
     return render_template('index.html', info=books, users=users, unavailable_books=unavailable_books)
 
 
 
-# # Route to serve viewer.html: Query for Book, Author, Publisher, Genre, 
-# @app.route('/viewer.html')
-# def viewer():
-#     type = request.args.get('type')
-#     id = request.args.get('id')
-    
-#     borrower = None
-#     heading = type.capitalize()
+# Route to serve viewer.html: Query for Book, Author, Publisher, Genre, 
+@app.route('/viewer.html')
+def viewer():
+    type_ = request.args.get('type')
+    id_ = request.args.get('id')
 
-#     try: 
-#         conn = get_db_connection()
-#         if conn is None:
-#             print("Unable to connect to the database")
-#             return []
-        
-#         cursor = conn.cursor()
+    with driver.session() as session:
+        heading = type_.capitalize()
+        info = {}
+        borrower = None
 
-#         columns = {
-#             "book": ['Title', 'Edition', 'ISBN', 'Publication Year', 'Shelf Location', 'Status'],
-#             "author": ['Name'],
-#             "publisher": ["Name"],
-#             "genre": ["Name"], 
-#             "user": ["Name", "Email", "Tel-No"]
-#         }
+        if type_ == 'book':
+            result = session.run("""
+            MATCH (b:Book {book_id: $id})
+            RETURN b.title AS Title, b.edition AS Edition, b.isbn AS ISBN, b.publication_year AS PublicationYear, b.shelf_location AS ShelfLocation, b.is_available AS Status
+            """, id=int(id_))
 
-#         queries = {
-#             "book": f"""
-#                 SELECT b.title, b.edition, b.isbn, b.publication_year, b.shelf_location, b.is_available
-#                 FROM books b
-#                 WHERE book_id = %s
-#             """,
-#             "author": f"""
-#                 SELECT name
-#                 FROM authors
-#                 WHERE author_id = %s
-#             """,
-#             "publisher": f"""
-#                 SELECT name
-#                 FROM publishers
-#                 WHERE publisher_id = %s
-#             """,
-#             "genre": f"""
-#                 SELECT name
-#                 FROM genres
-#                 WHERE genre_id = %s
-#             """, 
-#             "user": f"""
-#                 SELECT name, email, tel_no
-#                 FROM users
-#                 WHERE user_id = %s
-#             """
-#         }
+            record = result.single()
+            if record:
+                info = {
+                    "Title": record["Title"],
+                    "Edition": record["Edition"],
+                    "ISBN": record["ISBN"],
+                    "Publication Year": record["PublicationYear"],
+                    "Shelf Location": record["ShelfLocation"],
+                    "Status": record["Status"]
+                }
 
-#         book_specific_queries = {
-#             "author": f"""
-#                 SELECT 
-#                     a.author_id,
-#                     a.name
-#                 FROM books b
-#                 LEFT JOIN book_authors ba ON ba.book_id = b.book_id
-#                 LEFT JOIN authors a ON a.author_id = ba.author_id
-#                 WHERE b.book_id = %s
-#                 ORDER BY a.name
-#             """,
-#             "publisher": f"""
-#                 SELECT 
-#                     p.publisher_id,
-#                     p.name
-#                 FROM books b
-#                 LEFT JOIN book_publishers bp ON bp.book_id = b.book_id
-#                 LEFT JOIN publishers p ON p.publisher_id = bp.publisher_id
-#                 WHERE b.book_id = %s
-#                 ORDER BY p.name
-#             """, 
-#             "genre": f"""
-#                 SELECT 
-#                     g.genre_id,
-#                     g.name
-#                 FROM books b
-#                 LEFT JOIN book_genres bg ON bg.book_id = b.book_id
-#                 LEFT JOIN genres g ON g.genre_id = bg.genre_id
-#                 WHERE b.book_id = %s
-#                 ORDER BY g.name
-#             """
-#         }
+                # Related authors
+                authors = session.run("""
+                MATCH (b:Book {book_id: $id})-[:WRITTEN_BY]->(a:Author)
+                RETURN a.author_id AS author_id, a.name AS name ORDER BY a.name
+                """, id=int(id_))
+                info["Author"] = {r["author_id"]: r["name"] for r in authors}
 
-#         # Get information based on type
-#         query = queries[type]
-#         column = columns[type]
+                # Related publishers
+                publishers = session.run("""
+                MATCH (b:Book {book_id: $id})-[:PUBLISHED_BY]->(p:Publisher)
+                RETURN p.publisher_id AS publisher_id, p.name AS name ORDER BY p.name
+                """, id=int(id_))
+                info["Publisher"] = {r["publisher_id"]: r["name"] for r in publishers}
 
-#         cursor.execute(query, id)
-#         result = cursor.fetchall()
-#         info = dict(zip(column, result[0])) if result else {}
+                # Related genres
+                genres = session.run("""
+                MATCH (b:Book {book_id: $id})-[:HAS_GENRE]->(g:Genre)
+                RETURN g.genre_id AS genre_id, g.name AS name ORDER BY g.name
+                """, id=int(id_))
+                info["Genre"] = {r["genre_id"]: r["name"] for r in genres}
+
+                # Borrower if not available
+                if not info["Status"]:
+                    borrower_result = session.run("""
+                    MATCH (b:Book {book_id: $id})<-[br:BORROWED]-(u:User)
+                    RETURN u.name AS name, u.email AS email, u.tel_no AS tel_no
+                    ORDER BY br.borrow_date DESC LIMIT 1
+                    """, id=int(id_))
+                    rec = borrower_result.single()
+                    if rec:
+                        borrower = {
+                            "Name": rec["name"],
+                            "Email": rec["email"],
+                            "Tel-No": rec["tel_no"]
+                        }
+        elif type_ == 'author':
+            result = session.run("""
+            MATCH (a:Author {author_id: $id})
+            RETURN a.name AS Name
+            """, id=int(id_))
+            record = result.single()
+            if record:
+                info = {"Name": record["Name"]}
+        elif type_ == 'publisher':
+            result = session.run("""
+            MATCH (p:Publisher {publisher_id: $id})
+            RETURN p.name AS Name
+            """, id=int(id_))
+            record = result.single()
+            if record:
+                info = {"Name": record["Name"]}
+        elif type_ == 'genre':
+            result = session.run("""
+            MATCH (g:Genre {genre_id: $id})
+            RETURN g.name AS Name
+            """, id=int(id_))
+            record = result.single()
+            if record:
+                info = {"Name": record["Name"]}
+        else:
+            return "Invalid type", 400
+
+    return render_template('viewer.html', type=type_, info=info, heading=heading, borrower=borrower)
 
 
-#         if type == 'book':
-#             # Get related information for books: Author, Publisher, Genre
-#             for label, query in book_specific_queries.items():
-#                 cursor.execute(query, id)
-#                 results = cursor.fetchall()
-#                 info[label.capitalize()] = dict(results) if results else {}
+# # API route to fetch description from Gemini API
+# @app.route('/api/description', methods=['GET'])
+# def get_description():
+#     entity_name = request.args.get('name')
+#     logging.debug(f"Received request for entity name: {entity_name}")  # Changed to DEBUG
 
-#             # If book is not available, get borrower details
-#             if not info["Status"]:
-#                 borrower_query = f"""
-#                     SELECT u.name, u.email, u.tel_no
-#                     FROM books b
-#                     JOIN borrows br ON br.book_id = b.book_id
-#                     JOIN users u ON br.user_id = u.user_id
-#                     WHERE 
-#                         b.is_available = FALSE
-#                         AND b.book_id = %s
-#                     ORDER BY br.borrow_id DESC
-#                     LIMIT 1
-#                 """
+#     if not entity_name:
+#         logging.warning("Missing entity name in request.")
+#         return jsonify({'error': 'Missing entity name'}), 400
 
-#                 cursor.execute(borrower_query, id)
-#                 borrower_result = cursor.fetchone()
+#     if not GEMINI_API_URL or not GEMINI_API_KEY:
+#         logging.error("Gemini API configuration missing.")
+#         return jsonify({'error': 'Server configuration error'}), 500
 
-#                 borrower = dict(zip(columns['user'], borrower_result)) if borrower_result else {}
+#     # Prepare the JSON payload with explicit instructions
+#     payload = {
+#         "contents": [
+#             {
+#                 "parts": [
+#                     {
+#                         "text": (
+#                             f"Provide a detailed description of '{entity_name}'"
+#                             "If it is a book include information about the setting, characters, themes, key concepts, and its influence. "
+#                             "Do not include any concluding remarks or questions."
+#                             "Do not mention any Note at the end about not including concluding remarks or questions."
+#                         )
+#                     }
+#                 ]
+#             }
+#         ]
+#     }
 
-#         cursor.close()
-#         conn.close()
-#     except DatabaseError as e:
-#         logging.error(f"Database error occurred: {e}")
-#         return []
-    
-#     return render_template('viewer.html', heading=heading, info=info, borrower=borrower)
+#     # Construct the API URL with the API key as a query parameter
+#     api_url_with_key = f"{GEMINI_API_URL}?key={GEMINI_API_KEY}"
 
-# # # API route to fetch description from Gemini API
-# # @app.route('/api/description', methods=['GET'])
-# # def get_description():
-# #     entity_name = request.args.get('name')
-# #     logging.debug(f"Received request for entity name: {entity_name}")  # Changed to DEBUG
+#     headers = {
+#         "Content-Type": "application/json"
+#     }
 
-# #     if not entity_name:
-# #         logging.warning("Missing entity name in request.")
-# #         return jsonify({'error': 'Missing entity name'}), 400
+#     # Log the API URL and payload for debugging
+#     logging.debug(f"API URL: {api_url_with_key}")
+#     logging.debug(f"Payload: {payload}")
 
-# #     if not GEMINI_API_URL or not GEMINI_API_KEY:
-# #         logging.error("Gemini API configuration missing.")
-# #         return jsonify({'error': 'Server configuration error'}), 500
+#     try:
+#         # Make the POST request to the Gemini API
+#         response = requests.post(
+#             api_url_with_key,  # Include the API key in the URL
+#             headers=headers,
+#             json=payload,
+#             timeout=10  # seconds
+#         )
+#         logging.debug(f"Gemini API response status: {response.status_code}")  # Changed to DEBUG
 
-# #     # Prepare the JSON payload with explicit instructions
-# #     payload = {
-# #         "contents": [
-# #             {
-# #                 "parts": [
-# #                     {
-# #                         "text": (
-# #                             f"Provide a detailed description of '{entity_name}'"
-# #                             "If it is a book include information about the setting, characters, themes, key concepts, and its influence. "
-# #                             "Do not include any concluding remarks or questions."
-# #                             "Do not mention any Note at the end about not including concluding remarks or questions."
-# #                         )
-# #                     }
-# #                 ]
-# #             }
-# #         ]
-# #     }
+#         if response.status_code != 200:
+#             logging.error(f"Failed to fetch description from Gemini API. Status code: {response.status_code}")
+#             logging.error(f"Response content: {response.text}")
+#             return jsonify({
+#                 'error': 'Failed to fetch description from Gemini API',
+#                 'status_code': response.status_code,
+#                 'response': response.text
+#             }), 500
 
-# #     # Construct the API URL with the API key as a query parameter
-# #     api_url_with_key = f"{GEMINI_API_URL}?key={GEMINI_API_KEY}"
+#         response_data = response.json()
+#         # Extract the description from the response
+#         description = response_data.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', 'No description available.')
+#         logging.debug(f"Fetched description: {description}")  # Changed to DEBUG
 
-# #     headers = {
-# #         "Content-Type": "application/json"
-# #     }
+#         return jsonify({'description': description})
 
-# #     # Log the API URL and payload for debugging
-# #     logging.debug(f"API URL: {api_url_with_key}")
-# #     logging.debug(f"Payload: {payload}")
-
-# #     try:
-# #         # Make the POST request to the Gemini API
-# #         response = requests.post(
-# #             api_url_with_key,  # Include the API key in the URL
-# #             headers=headers,
-# #             json=payload,
-# #             timeout=10  # seconds
-# #         )
-# #         logging.debug(f"Gemini API response status: {response.status_code}")  # Changed to DEBUG
-
-# #         if response.status_code != 200:
-# #             logging.error(f"Failed to fetch description from Gemini API. Status code: {response.status_code}")
-# #             logging.error(f"Response content: {response.text}")
-# #             return jsonify({
-# #                 'error': 'Failed to fetch description from Gemini API',
-# #                 'status_code': response.status_code,
-# #                 'response': response.text
-# #             }), 500
-
-# #         response_data = response.json()
-# #         # Extract the description from the response
-# #         description = response_data.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', 'No description available.')
-# #         logging.debug(f"Fetched description: {description}")  # Changed to DEBUG
-
-# #         return jsonify({'description': description})
-
-# #     except requests.exceptions.RequestException as e:
-# #         logging.error(f"Exception during Gemini API request: {e}")
-# #         return jsonify({'error': 'Failed to connect to Gemini API', 'message': str(e)}), 500
-# #     except ValueError as e:
-# #         logging.error(f"JSON decoding failed: {e}")
-# #         return jsonify({'error': 'Invalid JSON response from Gemini API', 'message': str(e)}), 500
-# #     except Exception as e:
-# #         logging.exception(f"Unexpected error: {e}")
-# #         return jsonify({'error': 'An unexpected error occurred', 'message': str(e)}), 500
+#     except requests.exceptions.RequestException as e:
+#         logging.error(f"Exception during Gemini API request: {e}")
+#         return jsonify({'error': 'Failed to connect to Gemini API', 'message': str(e)}), 500
+#     except ValueError as e:
+#         logging.error(f"JSON decoding failed: {e}")
+#         return jsonify({'error': 'Invalid JSON response from Gemini API', 'message': str(e)}), 500
+#     except Exception as e:
+#         logging.exception(f"Unexpected error: {e}")
+#         return jsonify({'error': 'An unexpected error occurred', 'message': str(e)}), 500
 
 
-# @app.route('/borrow', methods=['POST'])
-# def borrow_book():
-#     conn = get_db_connection()
-#     cursor = conn.cursor()
+@app.route('/borrow', methods=['POST'])
+def borrow_book():
+    try:
+        book_id = int(request.form.get('borrowBookId'))
+        user_id = int(request.form.get('borrowerName'))
+        borrow_date_str = request.form.get('borrowDate')
 
-#     book_id = request.form.get('borrowBookId')
-#     user_id = request.form.get('borrowerName')
-#     borrow_date_str = request.form.get('borrowDate')
+        if not (book_id and user_id and borrow_date_str):
+            return "Missing form data", 400
 
-#     # Parse string to date
-#     borrow_date = datetime.strptime(borrow_date_str, '%Y-%m-%d').date()
-#     due_date = borrow_date + relativedelta(months=1)
+        borrow_date = datetime.strptime(borrow_date_str, '%Y-%m-%d').date()
+        due_date = borrow_date + relativedelta(months=1)
 
+        with driver.session() as session:
+            # Check if book is available
+            result = session.run("MATCH (b:Book {book_id: $book_id}) RETURN b.is_available AS is_available", book_id=book_id)
+            record = result.single()
+            if not record or not record["is_available"]:
+                return "Book is not available", 400
 
-#     borrow_insert_query = """
-#         INSERT INTO borrows (user_id, book_id, borrow_date, due_date)
-#         VALUES (%s, %s, %s, %s)
-#     """
-#     cursor.execute(borrow_insert_query, (user_id, book_id, borrow_date.strftime('%Y-%m-%d'), due_date.strftime('%Y-%m-%d')))
+            # Create or match the user node (assuming users exist)
+            session.run("""
+            MATCH (b:Book {book_id: $book_id}), (u:User {user_id: $user_id})
+            CREATE (u)-[:BORROWED {borrow_date: $borrow_date, due_date: $due_date}]->(b)
+            SET b.is_available = false
+            """, book_id=book_id, user_id=user_id,
+               borrow_date=borrow_date.isoformat(),
+               due_date=due_date.isoformat())
 
-#     book_update_query = """
-#         UPDATE books
-#         SET is_available = FALSE
-#         WHERE book_id = %s
-#     """
-#     cursor.execute(book_update_query, (book_id,))
-
-#     user_update_query = """
-#         UPDATE users
-#         SET books_borrowed = books_borrowed + 1
-#         WHERE user_id = %s
-#     """
-#     cursor.execute(user_update_query, (user_id,))
-
-#     conn.commit()
-#     conn.close()
-
-#     return redirect('/')
+        return redirect('/')
+    except Exception as e:
+        logging.error(f"Error in borrow_book: {e}")
+        return "Internal Server Error", 500
 
 
 # @app.route('/return', methods=['POST'])
