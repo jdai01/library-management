@@ -1,4 +1,4 @@
-# Task 2 - Relational DB (PostgreSQL)
+# Task 2 - Relational Modeling: Postgres DB
 
 ## 1. Dockerized Application Stack
 - A `Dockerfile` and `docker-compose.yaml` are provided to streamline setup.
