@@ -330,7 +330,7 @@ def viewer():
         query = queries[type]
         column = columns[type]
 
-        cursor.execute(query, id)
+        cursor.execute(query, (id,))
         result = cursor.fetchall()
         info = dict(zip(column, result[0])) if result else {}
 
@@ -338,7 +338,7 @@ def viewer():
         if type == 'book':
             # Get related information for books: Author, Publisher, Genre
             for label, query in book_specific_queries.items():
-                cursor.execute(query, id)
+                cursor.execute(query, (id,))
                 results = cursor.fetchall()
                 info[label.capitalize()] = dict(results) if results else {}
 
@@ -356,7 +356,7 @@ def viewer():
                     LIMIT 1
                 """
 
-                cursor.execute(borrower_query, id)
+                cursor.execute(borrower_query, (id,))
                 borrower_result = cursor.fetchone()
 
                 borrower = dict(zip(columns['user'], borrower_result)) if borrower_result else {}
