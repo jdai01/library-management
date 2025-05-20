@@ -200,7 +200,7 @@ def viewer():
 
         # Map types to fields
         columns = {
-            "book": ['Title', 'Edition', 'ISBN', 'Publication Year', 'Shelf Location', 'Status'],
+            "book": ['Title', 'Edition', 'ISBN', 'Publication Year', 'Shelf Location', 'Status', "Movie Release Date"],
             "author": ['Name'],
             "publisher": ["Name"],
             "genre": ["Name"],
@@ -219,7 +219,8 @@ def viewer():
                 "ISBN": book.get("isbn", ""),
                 "Publication Year": book.get("publication_year", ""),
                 "Shelf Location": book.get("shelf_location", ""),
-                "Status": book.get("is_available", True)
+                "Status": book.get("is_available", True),
+                "Movie Release Date": book.get("movie_release", "")
             }
 
             # Get related Author(s)

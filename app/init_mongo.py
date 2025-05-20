@@ -1,6 +1,7 @@
 import configparser
 from pymongo import MongoClient
 from pymongo.errors import CollectionInvalid
+from datetime import datetime
 
 def initialize():
     # Load config.ini
@@ -69,7 +70,8 @@ def initialize():
             "shelf_location": "A1",
             "authors": [authors_result.inserted_ids[0]],
             "genres": [genres_result.inserted_ids[0], genres_result.inserted_ids[1], genres_result.inserted_ids[2]],
-            "publishers": [publishers_result.inserted_ids[0], publishers_result.inserted_ids[1]]
+            "publishers": [publishers_result.inserted_ids[0], publishers_result.inserted_ids[1]],
+            "movie_release": datetime.strptime("2001-11-22", "%Y-%m-%d")
         },
         {
             "title": "Harry Potter and the Chamber of Secrets",
@@ -80,7 +82,8 @@ def initialize():
             "shelf_location": "A1",
             "authors": [authors_result.inserted_ids[0]],
             "genres": [genres_result.inserted_ids[0], genres_result.inserted_ids[1], genres_result.inserted_ids[2]],
-            "publishers": [publishers_result.inserted_ids[0], publishers_result.inserted_ids[1]]
+            "publishers": [publishers_result.inserted_ids[0], publishers_result.inserted_ids[1]],
+            "movie_release": datetime.strptime("2002-11-14", "%Y-%m-%d")
         },
         {
             "title": "Harry Potter and the Prisoner of Azkaban",
@@ -91,7 +94,8 @@ def initialize():
             "shelf_location": "A1",
             "authors": [authors_result.inserted_ids[0]],
             "genres": [genres_result.inserted_ids[0], genres_result.inserted_ids[1], genres_result.inserted_ids[2]],
-            "publishers": [publishers_result.inserted_ids[0], publishers_result.inserted_ids[1]]
+            "publishers": [publishers_result.inserted_ids[0], publishers_result.inserted_ids[1]],
+            "movie_release": datetime.strptime("2004-06-03", "%Y-%m-%d")
         },
         {
             "title": "Harry Potter and the Goblet of Fire",
@@ -102,7 +106,8 @@ def initialize():
             "shelf_location": "A1",
             "authors": [authors_result.inserted_ids[0]],
             "genres": [genres_result.inserted_ids[0], genres_result.inserted_ids[1], genres_result.inserted_ids[2]],
-            "publishers": [publishers_result.inserted_ids[0], publishers_result.inserted_ids[1]]
+            "publishers": [publishers_result.inserted_ids[0], publishers_result.inserted_ids[1]],
+            "movie_release": datetime.strptime("2005-11-16", "%Y-%m-%d")
         },
         {
             "title": "Harry Potter and the Order of the Phoenix",
@@ -113,7 +118,8 @@ def initialize():
             "shelf_location": "A1",
             "authors": [authors_result.inserted_ids[0]],
             "genres": [genres_result.inserted_ids[0], genres_result.inserted_ids[1], genres_result.inserted_ids[2]],
-            "publishers": [publishers_result.inserted_ids[0], publishers_result.inserted_ids[1]]
+            "publishers": [publishers_result.inserted_ids[0], publishers_result.inserted_ids[1]],
+            "movie_release": datetime.strptime("2007-07-12", "%Y-%m-%d")
         },
         {
             "title": "Harry Potter and the Half-Blood Prince",
@@ -124,7 +130,8 @@ def initialize():
             "shelf_location": "A1",
             "authors": [authors_result.inserted_ids[0]],
             "genres": [genres_result.inserted_ids[0], genres_result.inserted_ids[1], genres_result.inserted_ids[2]],
-            "publishers": [publishers_result.inserted_ids[0], publishers_result.inserted_ids[1]]
+            "publishers": [publishers_result.inserted_ids[0], publishers_result.inserted_ids[1]],
+            "movie_release": datetime.strptime("2009-07-16", "%Y-%m-%d")
         },
         {
             "title": "Harry Potter and the Deathly Hallows",
@@ -135,7 +142,8 @@ def initialize():
             "shelf_location": "A1",
             "authors": [authors_result.inserted_ids[0]],
             "genres": [genres_result.inserted_ids[0], genres_result.inserted_ids[1], genres_result.inserted_ids[2]],
-            "publishers": [publishers_result.inserted_ids[0], publishers_result.inserted_ids[1]]
+            "publishers": [publishers_result.inserted_ids[0], publishers_result.inserted_ids[1]],
+            "movie_release": datetime.strptime("2018-08-23", "%Y-%m-%d")
         },
         {
             "title": "Crazy Rich Asians",
@@ -146,7 +154,8 @@ def initialize():
             "shelf_location": "B2",
             "authors": [authors_result.inserted_ids[1]],
             "genres": [genres_result.inserted_ids[3], genres_result.inserted_ids[4], genres_result.inserted_ids[5]],
-            "publishers": [publishers_result.inserted_ids[2]]
+            "publishers": [publishers_result.inserted_ids[2]],
+            "movie_release": datetime.strptime("2010-11-17", "%Y-%m-%d")
         },
         {
             "title": "China Rich Girlfriend",
