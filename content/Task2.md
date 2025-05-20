@@ -1,4 +1,4 @@
-# Task 2 - Relational DB (PostgreSQL)
+# Task 2 - Relational Modeling: Postgres DB
 
 This task focuses on designing and implementing a full relational database-backed library management system using PostgreSQL.
 
