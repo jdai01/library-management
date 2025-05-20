@@ -346,44 +346,51 @@ def viewer():
 #         return jsonify({'error': 'An unexpected error occurred', 'message': str(e)}), 500
 
 
-# @app.route('/borrow', methods=['POST'])
-# def borrow_book():
-#     conn = get_db_connection()
-#     cursor = conn.cursor()
+@app.route('/borrow', methods=['POST'])
+def borrow_book():
+    db = get_db_connection()
+    if db is None:
+        logging.error("Unable to connect to MongoDB")
+        return redirect('/')
 
-#     book_id = request.form.get('borrowBookId')
-#     user_id = request.form.get('borrowerName')
-#     borrow_date_str = request.form.get('borrowDate')
+    try:
+        # Get form data
+        book_id = request.form.get('borrowBookId')
+        user_id = request.form.get('borrowerName')
+        borrow_date_str = request.form.get('borrowDate')
 
-#     # Parse string to date
-#     borrow_date = datetime.strptime(borrow_date_str, '%Y-%m-%d').date()
-#     due_date = borrow_date + relativedelta(months=1)
+        # Convert to ObjectId
+        book_oid = ObjectId(book_id)
+        user_oid = ObjectId(user_id)
 
+        # Parse borrow date
+        borrow_date = datetime.strptime(borrow_date_str, '%Y-%m-%d')
+        due_date = borrow_date + relativedelta(months=1)
 
-#     borrow_insert_query = """
-#         INSERT INTO borrows (user_id, book_id, borrow_date, due_date)
-#         VALUES (%s, %s, %s, %s)
-#     """
-#     cursor.execute(borrow_insert_query, (user_id, book_id, borrow_date.strftime('%Y-%m-%d'), due_date.strftime('%Y-%m-%d')))
+        # 1. Insert borrow document
+        db.borrows.insert_one({
+            "user_id": user_oid,
+            "book_id": book_oid,
+            "borrow_date": borrow_date,
+            "due_date": due_date
+        })
 
-#     book_update_query = """
-#         UPDATE books
-#         SET is_available = FALSE
-#         WHERE book_id = %s
-#     """
-#     cursor.execute(book_update_query, (book_id,))
+        # 2. Update book availability
+        db.books.update_one(
+            {"_id": book_oid},
+            {"$set": {"is_available": False}}
+        )
 
-#     user_update_query = """
-#         UPDATE users
-#         SET books_borrowed = books_borrowed + 1
-#         WHERE user_id = %s
-#     """
-#     cursor.execute(user_update_query, (user_id,))
+        # 3. Update user's borrowed book count
+        db.users.update_one(
+            {"_id": user_oid},
+            {"$inc": {"books_borrowed": 1}}
+        )
 
-#     conn.commit()
-#     conn.close()
-
-#     return redirect('/')
+    except Exception as e:
+        logging.error(f"Error processing borrow request: {e}")
+    
+    return redirect('/')
 
 
 # @app.route('/return', methods=['POST'])
