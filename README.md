@@ -1,5 +1,4 @@
-# CAI_DBBDPr
-Database Systems and Big Data Technologies Practical
+# Library Management
 
 ## Tasks
 1. [Conceptual Modeling: Design an ER Diagram](content/Task1.md)
@@ -15,24 +14,5 @@ Database Systems and Big Data Technologies Practical
     cd library-management
     ```
 
-2. Build the App Images
-    ```bash
-    docker compose build
-    ```
-
-3. Start the App Containers
-    ```bash
-    docker compose up
-    ```
-
-4. Access Interfaces
-    - PostgreSQL Adminer Interface:  
-        View and manage your database in the browser: [Click here](http://127.0.0.1:8080/?pgsql=library)
-
-    - Library App Interface:  
-        Access the main Flask application: [Click here](http://127.0.0.1:5001)
-
-5. Stop and Remove Containers
-    ```bash
-    docker compose down
-    ```
+2. Setup Instructions  
+    Refer to the above individual task guides for detailed setup.

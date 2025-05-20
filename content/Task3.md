@@ -19,9 +19,27 @@ Relationships describe interactions or associations between entities:
 - `(:Book)-[:HAS_GENRE]->(:Genre)` – links a book to its genre.
 - `(:Book)-[:PUBLISHED_BY]->(:Publisher)` – links a book to its publisher.
 
-## Access Interfaces
-- Neo4j Interface:  
-    View and manage your database in the browser: [Click here](http://127.0.0.1:7474)
 
-- Library App Interface:  
-    Access the main Flask application: [Click here](http://127.0.0.1:5001)
+
+## Setup
+1. Switch to the `neo4j` branch
+    ```bash
+    git switch neo4j
+    ```
+
+2. Build and Start the App Containers
+    ```bash
+    docker compose up --build
+    ```
+
+3. Access Interfaces
+    - Neo4j Interface:  
+        View and manage your database in the browser: [Click here](http://127.0.0.1:7474)
+
+    - Library App Interface:  
+        Access the main Flask application: [Click here](http://127.0.0.1:5001)
+
+4. Stop and Remove Containers
+    ```bash
+    docker compose down
+    ```
