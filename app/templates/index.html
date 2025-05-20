@@ -148,7 +148,7 @@
                         <option value="" disabled selected>Select a Book</option>
                         <!-- Options will be populated dynamically -->
                         {% for ub in unavailable_books %}
-                            <option value="{{ ub[0] }}">{{ ub[1] }}</option>
+                            <option value="{{ ub['book_id'] }}">{{ ub['title'] }}</option>
                         {% endfor %}
                     </select>
 

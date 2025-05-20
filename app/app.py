@@ -373,72 +373,65 @@ def borrow_book():
         return "Internal Server Error", 500
 
 
-# @app.route('/return', methods=['POST'])
-# def return_book():
-#     conn = get_db_connection()
-#     cursor = conn.cursor()
+@app.route('/return', methods=['POST'])
+def return_book():
+    book_id = request.form.get('returnBookId')
+    return_date_str = request.form.get('returnDate')
 
-#     book_id = request.form.get('returnBookId')
-#     return_date_str = request.form.get('returnDate')
-#     return_date = datetime.strptime(return_date_str, '%Y-%m-%d').date()
+    if not (book_id and return_date_str):
+        return jsonify({'error': 'Missing form data'}), 400
 
-#     # Get borrow_id, due_date, user_id using parameterized query
-#     borrow_record_query = """
-#         SELECT borrow_id, user_id, due_date
-#         FROM borrows
-#         WHERE book_id = %s
-#         ORDER BY borrow_id DESC
-#         LIMIT 1
-#     """
-#     cursor.execute(borrow_record_query, (book_id,))
-#     borrow_record = cursor.fetchone()
+    try:
+        return_date = datetime.strptime(return_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'error': 'Invalid date format'}), 400
 
-#     if not borrow_record:
-#         cursor.close()
-#         conn.close()
-#         return jsonify({'error': 'No active borrow record found for this book'}), 404
+    with driver.session() as session:
+        # 1. Find the latest BORROWED relationship for the book and user
+        query = """
+        MATCH (u:User)-[r:BORROWED]->(b:Book {book_id: $book_id})
+        RETURN u.user_id AS user_id, r.borrow_date AS borrow_date, r.due_date AS due_date, r as borrow_rel
+        ORDER BY r.borrow_date DESC
+        LIMIT 1
+        """
+        result = session.run(query, book_id=int(book_id))
+        record = result.single()
 
-#     borrow_id, user_id, due_date_obj = borrow_record
-#     due_date = due_date_obj if isinstance(due_date_obj, datetime) else datetime.strptime(str(due_date_obj), '%Y-%m-%d').date()
+        if not record:
+            return jsonify({'error': 'No active borrow record found for this book'}), 404
 
+        user_id = record["user_id"]
+        due_date_str = record["due_date"]
+        due_date = datetime.strptime(due_date_str, '%Y-%m-%d').date()
 
-#     # Check for overdue
-#     overdue_status = return_date > due_date
-#     fine_amount_per_day = 1
-#     fine = 0.0
-#     if overdue_status:
-#         days_late = (return_date - due_date).days
-#         fine = round(days_late * fine_amount_per_day, 2)
+        # 2. Check overdue and calculate fine
+        overdue_status = return_date > due_date
+        fine_amount_per_day = 1
+        fine = 0.0
+        if overdue_status:
+            days_late = (return_date - due_date).days
+            fine = round(days_late * fine_amount_per_day, 2)
 
+        # 3. Create a RETURNED relationship (or node) and remove BORROWED relationship
+        session.run("""
+        MATCH (u:User)-[r:BORROWED]->(b:Book {book_id: $book_id})
+        WHERE u.user_id = $user_id
+        CREATE (u)-[:RETURNED {return_date: $return_date, fine: $fine, overdue_status: $overdue_status}]->(b)
+        DELETE r
+        SET b.is_available = true
+        """, book_id=int(book_id),
+             user_id=user_id,
+             return_date=return_date.isoformat(),
+             fine=fine,
+             overdue_status=overdue_status)
 
-#     # Insert into returns using parameterized query
-#     returns_query = """
-#         INSERT INTO returns (borrow_id, return_date, fine, overdue_status)
-#         VALUES (%s, %s, %s, %s)
-#     """
-#     cursor.execute(returns_query, (borrow_id, return_date, fine, overdue_status))
+        # 4. Decrement user's books_borrowed count (assuming books_borrowed is stored as a property)
+        session.run("""
+        MATCH (u:User {user_id: $user_id})
+        SET u.books_borrowed = coalesce(u.books_borrowed, 1) - 1
+        """, user_id=user_id)
 
-#     # Update book availability
-#     update_book_query = """
-#         UPDATE books
-#         SET is_available = TRUE
-#         WHERE book_id = %s
-#     """
-#     cursor.execute(update_book_query, (book_id,))
-
-#     # Update user's borrowed book count
-#     update_user_query = """
-#         UPDATE users
-#         SET books_borrowed = books_borrowed - 1
-#         WHERE user_id = %s
-#     """
-#     cursor.execute(update_user_query, (user_id,))
-
-
-#     conn.commit()
-#     conn.close()
-
-#     return redirect('/')
+    return redirect('/')
 
 
 @app.route('/reset', methods=['POST'])
