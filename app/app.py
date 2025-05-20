@@ -9,6 +9,8 @@ from collections import defaultdict
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
+from neo4j import GraphDatabase
+
 app = Flask(__name__, static_url_path='/static', static_folder='static')
 CORS(app)
 

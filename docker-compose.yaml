@@ -1,26 +1,41 @@
 # version: '3.8'
 services:
-    # database
-    db:
-        container_name: library_management_db
-        image: postgres
-        # hostname: localhost
-        ports:
-            - "5432:5432"
-        environment:
-            POSTGRES_USER: admin
-            POSTGRES_PASSWORD: secret
-            POSTGRES_DB: library
-        volumes: 
-            - postgres-data:/var/lib/postgresql/data 
-        restart: unless-stopped
+    # # database
+    # db:
+    #     container_name: library_management_db
+    #     image: postgres
+    #     # hostname: localhost
+    #     ports:
+    #         - "5432:5432"
+    #     environment:
+    #         POSTGRES_USER: admin
+    #         POSTGRES_PASSWORD: secret
+    #         POSTGRES_DB: library
+    #     volumes: 
+    #         - postgres-data:/var/lib/postgresql/data 
+    #     restart: unless-stopped
 
-    # admin2
-    adminer:
-        container_name: adminer
-        image: adminer
+    # # admin2
+    # adminer:
+    #     container_name: adminer
+    #     image: adminer
+    #     ports:
+    #         - 8080:8080
+
+    neo4j:
+        container_name: neo4j
+        image: neo4j:4.4.3-community
         ports:
-            - 8080:8080
+            - 7474:7474   # HTTP access (browser interface)
+            - 7687:7687   # Bolt protocol (for applications)
+        restart: unless-stopped
+        environment:
+            NEO4J_AUTH: neo4j/password
+        volumes:
+            - neo4j_data:/data
+            - neo4j_conf:/conf
+            - neo4j_logs:/logs
+            - neo4j_plugins:/plugins
 
     # flask
     app:  
@@ -29,15 +44,21 @@ services:
         volumes:
             - ./app:/app  
         depends_on:
-            - db  
+            - neo4j  
         ports:
             - "5001:5000"
         environment:
-            - FLASK_DEBUG=1
-            - FLASK_APP=app.py
-            - FLASK_ENV=development
+            FLASK_DEBUG: 1
+            FLASK_APP: app.py
+            FLASK_ENV: development
+            NEO4J_URI: bolt://neo4j:7687
+            NEO4J_USER: neo4j
+            NEO4J_PASSWORD: password
         command: flask run -h 0.0.0.0
         restart: unless-stopped
         
 volumes:
-    postgres-data: {}
+    neo4j_data: {}
+    neo4j_conf: {}
+    neo4j_logs: {}
+    neo4j_plugins: {}
