@@ -94,15 +94,15 @@ def initialize_database():
 
 
 # Route to serve the home page
-@app.route('/')
+@app.route('/init')
 def initialise():
     initialize_database()
 
-    return redirect('/index.html')
+    return redirect('/')
 
 
 # Book Cateloge
-@app.route('/index.html')
+@app.route('/')
 def index():
     conn = None
     cursor = None
@@ -219,7 +219,7 @@ def index():
         cursor.execute(unavailable_books_query)
         unavailable_books = cursor.fetchall()
 
-        return render_template('index.html', info=book_info, users=users, unavailable_books=unavailable_books)
+        return render_template('/index.html', info=book_info, users=users, unavailable_books=unavailable_books)
 
     except DatabaseError as e:
         logging.error(f"Database error occurred: {e}")
@@ -261,27 +261,27 @@ def viewer():
             "book": f"""
                 SELECT b.title, b.edition, b.isbn, b.publication_year, b.shelf_location, b.is_available
                 FROM books b
-                WHERE book_id = {id}
+                WHERE book_id = %s
             """,
             "author": f"""
                 SELECT name
                 FROM authors
-                WHERE author_id = {id}
+                WHERE author_id = %s
             """,
             "publisher": f"""
                 SELECT name
                 FROM publishers
-                WHERE publisher_id = {id}
+                WHERE publisher_id = %s
             """,
             "genre": f"""
                 SELECT name
                 FROM genres
-                WHERE genre_id = {id}
+                WHERE genre_id = %s
             """, 
             "user": f"""
                 SELECT name, email, tel_no
                 FROM users
-                WHERE user_id = {id}
+                WHERE user_id = %s
             """
         }
 
@@ -293,18 +293,18 @@ def viewer():
                 FROM books b
                 LEFT JOIN book_authors ba ON ba.book_id = b.book_id
                 LEFT JOIN authors a ON a.author_id = ba.author_id
-                WHERE b.book_id = {id}
+                WHERE b.book_id = %s
                 ORDER BY a.name
             """,
             "publisher": f"""
                 SELECT 
-                    g.genre_id,
-                    g.name
+                    p.publisher_id,
+                    p.name
                 FROM books b
-                LEFT JOIN book_genres bg ON bg.book_id = b.book_id
-                LEFT JOIN genres g ON g.genre_id = bg.genre_id
-                WHERE b.book_id = {id}
-                ORDER BY g.name
+                LEFT JOIN book_publishers bp ON bp.book_id = b.book_id
+                LEFT JOIN publishers p ON p.publisher_id = bp.publisher_id
+                WHERE b.book_id = %s
+                ORDER BY p.name
             """, 
             "genre": f"""
                 SELECT 
@@ -313,7 +313,7 @@ def viewer():
                 FROM books b
                 LEFT JOIN book_genres bg ON bg.book_id = b.book_id
                 LEFT JOIN genres g ON g.genre_id = bg.genre_id
-                WHERE b.book_id = {id}
+                WHERE b.book_id = %s
                 ORDER BY g.name
             """
         }
@@ -322,7 +322,7 @@ def viewer():
         query = queries[type]
         column = columns[type]
 
-        cursor.execute(query)
+        cursor.execute(query, id)
         result = cursor.fetchall()
         info = dict(zip(column, result[0])) if result else {}
 
@@ -330,7 +330,7 @@ def viewer():
         if type == 'book':
             # Get related information for books: Author, Publisher, Genre
             for label, query in book_specific_queries.items():
-                cursor.execute(query)
+                cursor.execute(query, id)
                 results = cursor.fetchall()
                 info[label.capitalize()] = dict(results) if results else {}
 
@@ -343,12 +343,12 @@ def viewer():
                     JOIN users u ON br.user_id = u.user_id
                     WHERE 
                         b.is_available = FALSE
-                        AND b.book_id = {id}
+                        AND b.book_id = %s
                     ORDER BY br.borrow_id DESC
                     LIMIT 1
                 """
 
-                cursor.execute(borrower_query)
+                cursor.execute(borrower_query, id)
                 borrower_result = cursor.fetchone()
 
                 borrower = dict(zip(columns['user'], borrower_result)) if borrower_result else {}
@@ -455,30 +455,31 @@ def borrow_book():
     due_date = borrow_date + relativedelta(months=1)
 
 
-    borrow_insert_query = f"""
+    borrow_insert_query = """
         INSERT INTO borrows (user_id, book_id, borrow_date, due_date)
-        VALUES ({user_id}, {book_id}, '{borrow_date.strftime('%Y-%m-%d')}', '{due_date.strftime('%Y-%m-%d')}')
+        VALUES (%s, %s, %s, %s)
     """
+    cursor.execute(borrow_insert_query, (user_id, book_id, borrow_date.strftime('%Y-%m-%d'), due_date.strftime('%Y-%m-%d')))
 
-    book_update_query = f"""
-        UPDATE books 
+    book_update_query = """
+        UPDATE books
         SET is_available = FALSE
-        WHERE book_id = {book_id}
+        WHERE book_id = %s
     """
+    cursor.execute(book_update_query, (book_id,))
 
-    user_update_query = f"""
-        UPDATE users 
+    user_update_query = """
+        UPDATE users
         SET books_borrowed = books_borrowed + 1
-        WHERE user_id = {user_id}
+        WHERE user_id = %s
     """
-
-    for query in [borrow_insert_query, book_update_query, user_update_query]:
-        cursor.execute(query)
+    cursor.execute(user_update_query, (user_id,))
 
     conn.commit()
     conn.close()
 
-    return redirect('/index.html')
+    return redirect('/')
+
 
 @app.route('/return', methods=['POST'])
 def return_book():
@@ -489,69 +490,69 @@ def return_book():
     return_date_str = request.form.get('returnDate')
     return_date = datetime.strptime(return_date_str, '%Y-%m-%d').date()
 
-    # Get borrow_id, due_date, user_id
-    borrow_record_query = f"""
-        SELECT
-            borrow_id,
-            user_id,
-            due_date
+    # Get borrow_id, due_date, user_id using parameterized query
+    borrow_record_query = """
+        SELECT borrow_id, user_id, due_date
         FROM borrows
-        WHERE 
-            book_id = {book_id}
+        WHERE book_id = %s
         ORDER BY borrow_id DESC
         LIMIT 1
     """
-    cursor.execute(borrow_record_query)
+    cursor.execute(borrow_record_query, (book_id,))
     borrow_record = cursor.fetchone()
 
     if not borrow_record:
+        cursor.close()
         conn.close()
         return jsonify({'error': 'No active borrow record found for this book'}), 404
 
-    borrow_id, user_id, due_date_str = borrow_record
-    due_date = datetime.strptime(str(due_date_str), '%Y-%m-%d').date()
+    borrow_id, user_id, due_date_obj = borrow_record
+    due_date = due_date_obj if isinstance(due_date_obj, datetime) else datetime.strptime(str(due_date_obj), '%Y-%m-%d').date()
 
 
     # Check for overdue
     overdue_status = return_date > due_date
+    fine_amount_per_day = 1
     fine = 0.0
-    fine_amount = 1
     if overdue_status:
         days_late = (return_date - due_date).days
-        fine = round(days_late * fine_amount, 2) 
+        fine = round(days_late * fine_amount_per_day, 2)
 
 
-    # Insert into returns
-    returns_query = f"""
+    # Insert into returns using parameterized query
+    returns_query = """
         INSERT INTO returns (borrow_id, return_date, fine, overdue_status)
-        VALUES ({borrow_id}, '{return_date.strftime('%Y-%m-%d')}', {fine}, {overdue_status})
+        VALUES (%s, %s, %s, %s)
     """
+    cursor.execute(returns_query, (borrow_id, return_date, fine, overdue_status))
 
-    update_book_query = f"""
+    # Update book availability
+    update_book_query = """
         UPDATE books
         SET is_available = TRUE
-        WHERE book_id = {book_id}
+        WHERE book_id = %s
     """
+    cursor.execute(update_book_query, (book_id,))
 
-    update_user_query = f"""
+    # Update user's borrowed book count
+    update_user_query = """
         UPDATE users
         SET books_borrowed = books_borrowed - 1
-        WHERE user_id = {user_id}
+        WHERE user_id = %s
     """
-
-    for query in [returns_query, update_book_query, update_user_query]:
-        cursor.execute(query)
+    cursor.execute(update_user_query, (user_id,))
 
 
     conn.commit()
     conn.close()
 
-    return redirect('/index.html')
+    return redirect('/')
+
 
 @app.route('/reset', methods=['POST'])
 def reset_database():
     # Redirect to initialise
-    return redirect('/')
+    return redirect('/init')
 
 
 if __name__ == '__main__':
