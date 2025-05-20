@@ -1,21 +1,21 @@
 from flask import Flask, render_template, jsonify, request, redirect
 import configparser
-import requests
 import logging
 from flask_cors import CORS
 from pymongo import MongoClient
+from pymongo.errors import PyMongoError
 from collections import defaultdict
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import subprocess
-import os
+from bson.objectid import ObjectId
 
 app = Flask(__name__, static_url_path='/static', static_folder='static')
 CORS(app)
 
 # Configure logging to DEBUG level for detailed logs
 logging.basicConfig(
-    level=logging.DEBUG,  # Changed from INFO to DEBUG
+    level=logging.INFO,  # Changed from INFO to DEBUG
     format='%(asctime)s %(levelname)s %(message)s',
     handlers=[
         logging.StreamHandler()
@@ -101,352 +101,249 @@ def initialise():
     }), 200
 
 
-# # Book Cateloge
-# @app.route('/')
-# def index():
-#     conn = None
-#     cursor = None
+# Book Cateloge
+@app.route('/')
+def index():
+    db = get_db_connection()
+    if db is None:
+        logging.error("Unable to connect to MongoDB")
+        return []
+
+    try:
+        # 1. Fetch all books
+        books_cursor = db.books.find()
+        books = list(books_cursor)
+
+        # 2. Build mappings from authors, publishers, and genres
+        authors = {str(a['_id']): a['name'] for a in db.authors.find()}
+        genres = {str(g['_id']): g['name'] for g in db.genres.find()}
+        publishers = {str(p['_id']): p['name'] for p in db.publishers.find()}
+
+        # 3. Fetch borrows to find latest borrow per book
+        borrows = list(db.borrows.aggregate([
+            { "$sort": { "borrow_date": -1 } },
+            { "$group": {
+                "_id": "$book_id",
+                "latest": { "$first": "$$ROOT" }
+            }}
+        ]))
+        latest_borrows = {str(b["_id"]): b["latest"] for b in borrows}
+
+        # 4. Get user information for borrows
+        users = {str(u["_id"]): u for u in db.users.find()}
+
+        # 5. Compose book info
+        book_info = []
+        for index, book in enumerate(books):
+            book_id_str = str(book["_id"])
+            borrow = latest_borrows.get(book_id_str)
+
+            borrower = None
+            borrow_date = None
+            due_date = None
+            if borrow:
+                user = users.get(str(borrow["user_id"]))
+                if user:
+                    borrower = {str(user["_id"]): user["name"]}
+                    borrow_date = borrow.get("borrow_date")
+                    due_date = borrow.get("due_date")
+
+            book_info.append({
+                "book_id": book_id_str,
+                "title": book["title"],
+                "is_available": book["is_available"],
+                "authors": {str(a_id): authors.get(str(a_id), "") for a_id in book.get("authors", [])},
+                "publishers": {str(p_id): publishers.get(str(p_id), "") for p_id in book.get("publishers", [])},
+                "genres": {str(g_id): genres.get(str(g_id), "") for g_id in book.get("genres", [])},
+                "borrower": borrower,
+                "borrow_date": borrow_date,
+                "due_date": due_date,
+            })
+
+        # 6. All users for dropdown
+        users_list = [
+            { "user_id": str(user["_id"]), "name": user["name"] }
+            for user in users.values()
+        ]
+
+        # 7. Unavailable books
+        unavailable_books_cursor = db.books.find({ "is_available": False }).sort("title", 1)
+        unavailable_books = [
+            { "book_id": str(book["_id"]), "title": book["title"] }
+            for book in unavailable_books_cursor
+        ]
+
+        return render_template("index.html", info=book_info, users=users_list, unavailable_books=unavailable_books)
+
+    except Exception as e:
+        logging.error(f"MongoDB error occurred: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': f"MongoDB error occurred: {e}"
+        }), 500
+
+
+# Route to serve viewer.html: Query for Book, Author, Publisher, Genre, 
+@app.route('/viewer.html')
+def viewer():
+    type = request.args.get('type')
+    id = request.args.get('id')
+
+    borrower = None
+    heading = type.capitalize()
+    info = {}
+
+    try:
+        db = get_db_connection()
+        if db is None:
+            print("Unable to connect to the database")
+            return []
+
+        # Map types to fields
+        columns = {
+            "book": ['Title', 'Edition', 'ISBN', 'Publication Year', 'Shelf Location', 'Status'],
+            "author": ['Name'],
+            "publisher": ["Name"],
+            "genre": ["Name"],
+            "user": ["Name", "Email", "Tel-No"]
+        }
+
+        # Fetch entity details based on type
+        if type == "book":
+            book = db.books.find_one({"_id": ObjectId(id)})
+            if not book:
+                return render_template('viewer.html', heading=heading, info={}, borrower={})
+
+            info = {
+                "Title": book.get("title", ""),
+                "Edition": book.get("edition", ""),
+                "ISBN": book.get("isbn", ""),
+                "Publication Year": book.get("publication_year", ""),
+                "Shelf Location": book.get("shelf_location", ""),
+                "Status": book.get("is_available", True)
+            }
+
+            # Get related Author(s)
+            if "author_ids" in book:
+                authors = db.authors.find({"_id": {"$in": book["author_ids"]}})
+                info["Author"] = {str(a["_id"]): a["name"] for a in authors}
+
+            # Get related Publisher(s)
+            if "publisher_ids" in book:
+                publishers = db.publishers.find({"_id": {"$in": book["publisher_ids"]}})
+                info["Publisher"] = {str(p["_id"]): p["name"] for p in publishers}
+
+            # Get related Genre(s)
+            if "genre_ids" in book:
+                genres = db.genres.find({"_id": {"$in": book["genre_ids"]}})
+                info["Genre"] = {str(g["_id"]): g["name"] for g in genres}
+
+            # Get borrower if not available
+            if not book.get("is_available", True):
+                borrow = db.borrows.find_one(
+                    {"book_id": book["_id"]},
+                    sort=[("borrow_date", -1)]
+                )
+                if borrow:
+                    user = db.users.find_one({"_id": borrow["user_id"]})
+                    if user:
+                        borrower = {
+                            "Name": user.get("name", ""),
+                            "Email": user.get("email", ""),
+                            "Tel-No": user.get("tel_no", "")
+                        }
+
+        elif type in {"author", "publisher", "genre", "user"}:
+            collection = db[type + "s"]
+            document = collection.find_one({"_id": ObjectId(id)})
+            if document:
+                keys = columns[type]
+                info = {keys[i]: document.get(k.lower(), "") for i, k in enumerate(keys)}
+
+    except PyMongoError as e:
+        logging.error(f"MongoDB error occurred: {e}")
+        return []
+
+    return render_template('viewer.html', heading=heading, info=info, borrower=borrower)
+
+# # API route to fetch description from Gemini API
+# @app.route('/api/description', methods=['GET'])
+# def get_description():
+#     entity_name = request.args.get('name')
+#     logging.debug(f"Received request for entity name: {entity_name}")  # Changed to DEBUG
+
+#     if not entity_name:
+#         logging.warning("Missing entity name in request.")
+#         return jsonify({'error': 'Missing entity name'}), 400
+
+#     if not GEMINI_API_URL or not GEMINI_API_KEY:
+#         logging.error("Gemini API configuration missing.")
+#         return jsonify({'error': 'Server configuration error'}), 500
+
+#     # Prepare the JSON payload with explicit instructions
+#     payload = {
+#         "contents": [
+#             {
+#                 "parts": [
+#                     {
+#                         "text": (
+#                             f"Provide a detailed description of '{entity_name}'"
+#                             "If it is a book include information about the setting, characters, themes, key concepts, and its influence. "
+#                             "Do not include any concluding remarks or questions."
+#                             "Do not mention any Note at the end about not including concluding remarks or questions."
+#                         )
+#                     }
+#                 ]
+#             }
+#         ]
+#     }
+
+#     # Construct the API URL with the API key as a query parameter
+#     api_url_with_key = f"{GEMINI_API_URL}?key={GEMINI_API_KEY}"
+
+#     headers = {
+#         "Content-Type": "application/json"
+#     }
+
+#     # Log the API URL and payload for debugging
+#     logging.debug(f"API URL: {api_url_with_key}")
+#     logging.debug(f"Payload: {payload}")
+
 #     try:
-#         conn = get_db_connection()
-#         if conn is None:
-#             logging.error("Unable to connect to the database")
-#             return []
+#         # Make the POST request to the Gemini API
+#         response = requests.post(
+#             api_url_with_key,  # Include the API key in the URL
+#             headers=headers,
+#             json=payload,
+#             timeout=10  # seconds
+#         )
+#         logging.debug(f"Gemini API response status: {response.status_code}")  # Changed to DEBUG
 
-#         cursor = conn.cursor()
+#         if response.status_code != 200:
+#             logging.error(f"Failed to fetch description from Gemini API. Status code: {response.status_code}")
+#             logging.error(f"Response content: {response.text}")
+#             return jsonify({
+#                 'error': 'Failed to fetch description from Gemini API',
+#                 'status_code': response.status_code,
+#                 'response': response.text
+#             }), 500
 
-#         # Fetch book info with borrower data if unavailable
-#         book_query = """
-#             WITH LatestBorrows AS (
-#                 SELECT 
-#                     bo.book_id,
-#                     bo.user_id,
-#                     bo.borrow_date,
-#                     bo.due_date,
-#                     ROW_NUMBER() OVER (PARTITION BY bo.book_id ORDER BY bo.borrow_id DESC) AS rn
-#                 FROM borrows bo
-#                 LEFT JOIN books b ON bo.book_id = b.book_id
-#                 WHERE b.is_available=FALSE
-#             )
-#             SELECT 
-#                 b.book_id,
-#                 b.title,
-#                 b.is_available,
-#                 u.name AS borrower,
-#                 lb.borrow_date,
-#                 lb.due_date,
-#                 u.user_id
-#             FROM books b
-#             LEFT JOIN LatestBorrows lb ON lb.book_id = b.book_id AND lb.rn = 1
-#             LEFT JOIN users u ON u.user_id = lb.user_id
-#             ORDER BY b.book_id;
-#         """
-#         cursor.execute(book_query)
-#         books = cursor.fetchall()
+#         response_data = response.json()
+#         # Extract the description from the response
+#         description = response_data.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', 'No description available.')
+#         logging.debug(f"Fetched description: {description}")  # Changed to DEBUG
 
-#         # Fetch authors, publishers, genres
-#         def fetch_and_map(query):
-#             cursor.execute(query)
-#             results = cursor.fetchall()
-#             mapping = defaultdict(dict)
-#             for book_id, entity_id, entity_name in results:
-#                 mapping[book_id][entity_id] = entity_name
-#             return mapping
+#         return jsonify({'description': description})
 
-#         author_query = """
-#             SELECT b.book_id, a.author_id, a.name
-#             FROM books b
-#             JOIN book_authors ba ON ba.book_id = b.book_id
-#             JOIN authors a ON a.author_id = ba.author_id
-#             ORDER BY b.book_id
-#         """
-
-#         publisher_query = """
-#             SELECT b.book_id, p.publisher_id, p.name
-#             FROM books b
-#             JOIN book_publishers bp ON bp.book_id = b.book_id
-#             JOIN publishers p ON p.publisher_id = bp.publisher_id
-#             ORDER BY b.book_id
-#         """
-
-#         genre_query = """
-#             SELECT b.book_id, g.genre_id, g.name
-#             FROM books b
-#             JOIN book_genres bg ON bg.book_id = b.book_id
-#             JOIN genres g ON g.genre_id = bg.genre_id
-#             ORDER BY b.book_id
-#         """
-
-#         author_map = fetch_and_map(author_query)
-#         publisher_map = fetch_and_map(publisher_query)
-#         genre_map = fetch_and_map(genre_query)
-
-#         # Combine all info into structured list of dicts
-#         book_info = []
-#         for row in books:
-#             book_id, title, is_available, borrower_name, borrow_date, due_date, borrower_id = row
-#             book_info.append({
-#                 "book_id": book_id,
-#                 "title": title,
-#                 "is_available": is_available,
-#                 "authors": author_map.get(book_id, {}),
-#                 "publishers": publisher_map.get(book_id, {}),
-#                 "genres": genre_map.get(book_id, {}),
-#                 "borrower": {borrower_id: borrower_name} if borrower_id else None,
-#                 "borrow_date": borrow_date,
-#                 "due_date": due_date,
-#             })
-
-#         # Get user list
-#         user_query = """
-#             SELECT 
-#                 user_id, 
-#                 name 
-#             FROM users 
-#             ORDER BY name
-#         """
-#         cursor.execute(user_query)
-#         users_tuples = cursor.fetchall()
-#         users = [
-#             { 'user_id': u_id, 'name': name }
-#             for u_id, name in users_tuples
-#         ]
-
-#         # Get unavailable books
-#         unavailable_books_query = """
-#             SELECT 
-#                 book_id, 
-#                 title 
-#             FROM books 
-#             WHERE is_available = FALSE 
-#             ORDER BY title
-#         """
-#         cursor.execute(unavailable_books_query)
-#         unavailable_books_tuples = cursor.fetchall()
-#         unavailable_books = [
-#             { 'book_id': b_id, 'title': title }
-#             for b_id, title in unavailable_books_tuples
-#         ]
-
-#         return render_template('/index.html', info=book_info, users=users, unavailable_books=unavailable_books)
-
-#     except DatabaseError as e:
-#         logging.error(f"Database error occurred: {e}")
-#         return []
-
-#     finally:
-#         if cursor:
-#             cursor.close()
-#         if conn:
-#             conn.close()
-
-
-# # Route to serve viewer.html: Query for Book, Author, Publisher, Genre, 
-# @app.route('/viewer.html')
-# def viewer():
-#     type = request.args.get('type')
-#     id = request.args.get('id')
-    
-#     borrower = None
-#     heading = type.capitalize()
-
-#     try: 
-#         conn = get_db_connection()
-#         if conn is None:
-#             print("Unable to connect to the database")
-#             return []
-        
-#         cursor = conn.cursor()
-
-#         columns = {
-#             "book": ['Title', 'Edition', 'ISBN', 'Publication Year', 'Shelf Location', 'Status'],
-#             "author": ['Name'],
-#             "publisher": ["Name"],
-#             "genre": ["Name"], 
-#             "user": ["Name", "Email", "Tel-No"]
-#         }
-
-#         queries = {
-#             "book": f"""
-#                 SELECT b.title, b.edition, b.isbn, b.publication_year, b.shelf_location, b.is_available
-#                 FROM books b
-#                 WHERE book_id = %s
-#             """,
-#             "author": f"""
-#                 SELECT name
-#                 FROM authors
-#                 WHERE author_id = %s
-#             """,
-#             "publisher": f"""
-#                 SELECT name
-#                 FROM publishers
-#                 WHERE publisher_id = %s
-#             """,
-#             "genre": f"""
-#                 SELECT name
-#                 FROM genres
-#                 WHERE genre_id = %s
-#             """, 
-#             "user": f"""
-#                 SELECT name, email, tel_no
-#                 FROM users
-#                 WHERE user_id = %s
-#             """
-#         }
-
-#         book_specific_queries = {
-#             "author": f"""
-#                 SELECT 
-#                     a.author_id,
-#                     a.name
-#                 FROM books b
-#                 LEFT JOIN book_authors ba ON ba.book_id = b.book_id
-#                 LEFT JOIN authors a ON a.author_id = ba.author_id
-#                 WHERE b.book_id = %s
-#                 ORDER BY a.name
-#             """,
-#             "publisher": f"""
-#                 SELECT 
-#                     p.publisher_id,
-#                     p.name
-#                 FROM books b
-#                 LEFT JOIN book_publishers bp ON bp.book_id = b.book_id
-#                 LEFT JOIN publishers p ON p.publisher_id = bp.publisher_id
-#                 WHERE b.book_id = %s
-#                 ORDER BY p.name
-#             """, 
-#             "genre": f"""
-#                 SELECT 
-#                     g.genre_id,
-#                     g.name
-#                 FROM books b
-#                 LEFT JOIN book_genres bg ON bg.book_id = b.book_id
-#                 LEFT JOIN genres g ON g.genre_id = bg.genre_id
-#                 WHERE b.book_id = %s
-#                 ORDER BY g.name
-#             """
-#         }
-
-#         # Get information based on type
-#         query = queries[type]
-#         column = columns[type]
-
-#         cursor.execute(query, (id,))
-#         result = cursor.fetchall()
-#         info = dict(zip(column, result[0])) if result else {}
-
-
-#         if type == 'book':
-#             # Get related information for books: Author, Publisher, Genre
-#             for label, query in book_specific_queries.items():
-#                 cursor.execute(query, (id,))
-#                 results = cursor.fetchall()
-#                 info[label.capitalize()] = dict(results) if results else {}
-
-#             # If book is not available, get borrower details
-#             if not info["Status"]:
-#                 borrower_query = f"""
-#                     SELECT u.name, u.email, u.tel_no
-#                     FROM books b
-#                     JOIN borrows br ON br.book_id = b.book_id
-#                     JOIN users u ON br.user_id = u.user_id
-#                     WHERE 
-#                         b.is_available = FALSE
-#                         AND b.book_id = %s
-#                     ORDER BY br.borrow_id DESC
-#                     LIMIT 1
-#                 """
-
-#                 cursor.execute(borrower_query, (id,))
-#                 borrower_result = cursor.fetchone()
-
-#                 borrower = dict(zip(columns['user'], borrower_result)) if borrower_result else {}
-
-#         cursor.close()
-#         conn.close()
-#     except DatabaseError as e:
-#         logging.error(f"Database error occurred: {e}")
-#         return []
-    
-#     return render_template('viewer.html', heading=heading, info=info, borrower=borrower)
-
-# # # API route to fetch description from Gemini API
-# # @app.route('/api/description', methods=['GET'])
-# # def get_description():
-# #     entity_name = request.args.get('name')
-# #     logging.debug(f"Received request for entity name: {entity_name}")  # Changed to DEBUG
-
-# #     if not entity_name:
-# #         logging.warning("Missing entity name in request.")
-# #         return jsonify({'error': 'Missing entity name'}), 400
-
-# #     if not GEMINI_API_URL or not GEMINI_API_KEY:
-# #         logging.error("Gemini API configuration missing.")
-# #         return jsonify({'error': 'Server configuration error'}), 500
-
-# #     # Prepare the JSON payload with explicit instructions
-# #     payload = {
-# #         "contents": [
-# #             {
-# #                 "parts": [
-# #                     {
-# #                         "text": (
-# #                             f"Provide a detailed description of '{entity_name}'"
-# #                             "If it is a book include information about the setting, characters, themes, key concepts, and its influence. "
-# #                             "Do not include any concluding remarks or questions."
-# #                             "Do not mention any Note at the end about not including concluding remarks or questions."
-# #                         )
-# #                     }
-# #                 ]
-# #             }
-# #         ]
-# #     }
-
-# #     # Construct the API URL with the API key as a query parameter
-# #     api_url_with_key = f"{GEMINI_API_URL}?key={GEMINI_API_KEY}"
-
-# #     headers = {
-# #         "Content-Type": "application/json"
-# #     }
-
-# #     # Log the API URL and payload for debugging
-# #     logging.debug(f"API URL: {api_url_with_key}")
-# #     logging.debug(f"Payload: {payload}")
-
-# #     try:
-# #         # Make the POST request to the Gemini API
-# #         response = requests.post(
-# #             api_url_with_key,  # Include the API key in the URL
-# #             headers=headers,
-# #             json=payload,
-# #             timeout=10  # seconds
-# #         )
-# #         logging.debug(f"Gemini API response status: {response.status_code}")  # Changed to DEBUG
-
-# #         if response.status_code != 200:
-# #             logging.error(f"Failed to fetch description from Gemini API. Status code: {response.status_code}")
-# #             logging.error(f"Response content: {response.text}")
-# #             return jsonify({
-# #                 'error': 'Failed to fetch description from Gemini API',
-# #                 'status_code': response.status_code,
-# #                 'response': response.text
-# #             }), 500
-
-# #         response_data = response.json()
-# #         # Extract the description from the response
-# #         description = response_data.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', 'No description available.')
-# #         logging.debug(f"Fetched description: {description}")  # Changed to DEBUG
-
-# #         return jsonify({'description': description})
-
-# #     except requests.exceptions.RequestException as e:
-# #         logging.error(f"Exception during Gemini API request: {e}")
-# #         return jsonify({'error': 'Failed to connect to Gemini API', 'message': str(e)}), 500
-# #     except ValueError as e:
-# #         logging.error(f"JSON decoding failed: {e}")
-# #         return jsonify({'error': 'Invalid JSON response from Gemini API', 'message': str(e)}), 500
-# #     except Exception as e:
-# #         logging.exception(f"Unexpected error: {e}")
-# #         return jsonify({'error': 'An unexpected error occurred', 'message': str(e)}), 500
+#     except requests.exceptions.RequestException as e:
+#         logging.error(f"Exception during Gemini API request: {e}")
+#         return jsonify({'error': 'Failed to connect to Gemini API', 'message': str(e)}), 500
+#     except ValueError as e:
+#         logging.error(f"JSON decoding failed: {e}")
+#         return jsonify({'error': 'Invalid JSON response from Gemini API', 'message': str(e)}), 500
+#     except Exception as e:
+#         logging.exception(f"Unexpected error: {e}")
+#         return jsonify({'error': 'An unexpected error occurred', 'message': str(e)}), 500
 
 
 # @app.route('/borrow', methods=['POST'])
