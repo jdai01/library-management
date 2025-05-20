@@ -11,8 +11,8 @@ Database Systems and Big Data Technologies Practical
 ## Installation Guide
 1. Clone Repository
     ```bash
-    git clone https://github.com/jdai01/library_management
-    cd library_management
+    git clone https://github.com/jdai01/library-management
+    cd library-management
     ```
 
 2. Build the App Images

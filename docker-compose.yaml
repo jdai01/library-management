@@ -15,19 +15,6 @@ services:
             - postgres-data:/var/lib/postgresql/data 
         restart: unless-stopped
 
-    # admin
-    # pgadmin:
-    #     container_name: container-pgadmin
-    #     image: dpage/pgadmin4
-    #     depends_on:
-    #         - postgres
-    #     ports: 
-    #         - "5050:80"
-    #     environment: 
-    #         PGADMIN_DEFAULT_EMAIL: admin@admin.com
-    #         PGADMIN_DEFAULT_PASSWORD: root
-    #     restart: unless-stopped
-
     # admin2
     adminer:
         container_name: adminer
