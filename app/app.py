@@ -72,94 +72,95 @@ def test_neo4j():
 
 
 
-# # Initialize the Neo4j database
-# def initialize_database():
-#     logging.info("="*100)
-#     with driver.session() as session:
-#         with open(NEO4J_INI, 'r') as file:
-#             cypher_script = file.read()
-#         for statement in cypher_script.strip().split(';'):
-#             if statement.strip():
-#                 session.run(statement)
-#         logging.info("Database initialised.")
+# Initialize the Neo4j database
+def initialize_database():
+    logging.info("="*100)
+    with driver.session() as session:
+        with open(NEO4J_INI, 'r') as file:
+            cypher_script = file.read()
+        for statement in cypher_script.strip().split(';'):
+            if statement.strip():
+                session.run(statement)
+        logging.info("Database initialised.")
 
-# # Route to serve the home page
-# @app.route('/init')
-# def initialise():
-#     initialize_database()
+# Route to serve the home page
+@app.route('/init')
+def initialise():
+    initialize_database()
 
-#     # return redirect('/')
+    return redirect('/')
+    # return jsonify({"status": "success", "message": "Database initialised."})
 
 
-# # Book Cateloge
-# @app.route('/')
-# def index():
+# Book Cateloge
+@app.route('/')
+def index():
     
-#     with driver.session() as session:
-#         # Cypher query to get all books with latest borrow info (if any) and availability
-#         result = session.run("""
-#         MATCH (b:Book)
-#         OPTIONAL MATCH (b)<-[br:BORROWED]-(u:User)
-#         WITH b, u, br
-#         ORDER BY br.borrow_date DESC
-#         WITH b, head(collect({user: u, borrow_date: br.borrow_date, due_date: br.due_date})) AS latestBorrow
-#         RETURN b.book_id AS book_id,
-#                b.title AS title,
-#                b.is_available AS is_available,
-#                CASE WHEN latestBorrow IS NULL THEN null ELSE latestBorrow.user.user_id END AS borrower_id,
-#                CASE WHEN latestBorrow IS NULL THEN null ELSE latestBorrow.user.name END AS borrower_name,
-#                CASE WHEN latestBorrow IS NULL THEN null ELSE latestBorrow.borrow_date END AS borrow_date,
-#                CASE WHEN latestBorrow IS NULL THEN null ELSE latestBorrow.due_date END AS due_date
-#         ORDER BY book_id
-#         """)
+    with driver.session() as session:
+        # Cypher query to get all books with latest borrow info (if any) and availability
+        result = session.run("""
+        MATCH (b:Book)
+        OPTIONAL MATCH (b)<-[br:BORROWED]-(u:User)
+        WITH b, u, br
+        ORDER BY br.borrow_date DESC
+        WITH b, head(collect({user: u, borrow_date: br.borrow_date, due_date: br.due_date})) AS latestBorrow
+        RETURN b.book_id AS book_id,
+               b.title AS title,
+               b.is_available AS is_available,
+               CASE WHEN latestBorrow IS NULL THEN null ELSE latestBorrow.user.user_id END AS borrower_id,
+               CASE WHEN latestBorrow IS NULL THEN null ELSE latestBorrow.user.name END AS borrower_name,
+               CASE WHEN latestBorrow IS NULL THEN null ELSE latestBorrow.borrow_date END AS borrow_date,
+               CASE WHEN latestBorrow IS NULL THEN null ELSE latestBorrow.due_date END AS due_date
+        ORDER BY book_id
+        """)
 
-#         books = []
-#         for record in result:
-#             books.append({
-#                 "book_id": record["book_id"],
-#                 "title": record["title"],
-#                 "is_available": record["is_available"],
-#                 "borrower": {record["borrower_id"]: record["borrower_name"]} if record["borrower_id"] else None,
-#                 "borrow_date": record["borrow_date"],
-#                 "due_date": record["due_date"],
-#                 "authors": {},
-#                 "publishers": {},
-#                 "genres": {},
-#             })
+        books = []
+        for record in result:
+            books.append({
+                "book_id": record["book_id"],
+                "title": record["title"],
+                "is_available": record["is_available"],
+                "borrower": {record["borrower_id"]: record["borrower_name"]} if record["borrower_id"] else None,
+                "borrow_date": record["borrow_date"],
+                "due_date": record["due_date"],
+                "authors": {},
+                "publishers": {},
+                "genres": {},
+            })
 
-#         # Fetch authors, publishers, genres for all books
-#         # This can be done in separate queries or merged, here separated for clarity:
+        # Fetch authors, publishers, genres for all books
+        # This can be done in separate queries or merged, here separated for clarity:
 
-#         def fetch_related(label, rel_type):
-#             rel_result = session.run(f"""
-#                 MATCH (b:Book)-[:{rel_type}]->(e:{label})
-#                 RETURN b.book_id AS book_id, e.{label.lower()}_id AS entity_id, e.name AS name
-#                 ORDER BY b.book_id
-#             """)
-#             mapping = {}
-#             for rec in rel_result:
-#                 mapping.setdefault(rec["book_id"], {})[rec["entity_id"]] = rec["name"]
-#             return mapping
+        def fetch_related(label, rel_type):
+            rel_result = session.run(f"""
+                MATCH (b:Book)-[:{rel_type}]->(e:{label})
+                RETURN b.book_id AS book_id, e.{label.lower()}_id AS entity_id, e.name AS name
+                ORDER BY b.book_id
+            """)
+            mapping = {}
+            for rec in rel_result:
+                mapping.setdefault(rec["book_id"], {})[rec["entity_id"]] = rec["name"]
+            return mapping
 
-#         author_map = fetch_related("Author", "WRITTEN_BY")
-#         publisher_map = fetch_related("Publisher", "PUBLISHED_BY")
-#         genre_map = fetch_related("Genre", "HAS_GENRE")
+        author_map = fetch_related("Author", "WRITTEN_BY")
+        publisher_map = fetch_related("Publisher", "PUBLISHED_BY")
+        genre_map = fetch_related("Genre", "HAS_GENRE")
 
-#         for book in books:
-#             book_id = book["book_id"]
-#             book["authors"] = author_map.get(book_id, {})
-#             book["publishers"] = publisher_map.get(book_id, {})
-#             book["genres"] = genre_map.get(book_id, {})
+        for book in books:
+            book_id = book["book_id"]
+            book["authors"] = author_map.get(book_id, {})
+            book["publishers"] = publisher_map.get(book_id, {})
+            book["genres"] = genre_map.get(book_id, {})
 
-#         # Get all users
-#         users_result = session.run("MATCH (u:User) RETURN u.user_id AS user_id, u.name AS name ORDER BY u.name")
-#         users = [{"user_id": r["user_id"], "name": r["name"]} for r in users_result]
+        # Get all users
+        users_result = session.run("MATCH (u:User) RETURN u.user_id AS user_id, u.name AS name ORDER BY u.name")
+        users = [{"user_id": r["user_id"], "name": r["name"]} for r in users_result]
 
-#         # Unavailable books
-#         unavailable_books_result = session.run("MATCH (b:Book) WHERE b.is_available = false RETURN b.book_id AS book_id, b.title AS title ORDER BY title")
-#         unavailable_books = [{"book_id": r["book_id"], "title": r["title"]} for r in unavailable_books_result]
+        # Unavailable books
+        unavailable_books_result = session.run("MATCH (b:Book) WHERE b.is_available = false RETURN b.book_id AS book_id, b.title AS title ORDER BY title")
+        unavailable_books = [{"book_id": r["book_id"], "title": r["title"]} for r in unavailable_books_result]
 
-#     return render_template('index.html', info=books, users=users, unavailable_books=unavailable_books)
+    return render_template('index.html', info=books, users=users, unavailable_books=unavailable_books)
 
 
 
