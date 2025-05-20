@@ -393,72 +393,66 @@ def borrow_book():
     return redirect('/')
 
 
-# @app.route('/return', methods=['POST'])
-# def return_book():
-#     conn = get_db_connection()
-#     cursor = conn.cursor()
+@app.route('/return', methods=['POST'])
+def return_book():
+    db = get_db_connection()
+    if db is None:
+        logging.error("Unable to connect to MongoDB")
+        return redirect('/')
 
-#     book_id = request.form.get('returnBookId')
-#     return_date_str = request.form.get('returnDate')
-#     return_date = datetime.strptime(return_date_str, '%Y-%m-%d').date()
+    try:
+        # Get form data
+        book_id = request.form.get('returnBookId')
+        return_date_str = request.form.get('returnDate')
+        return_date = datetime.strptime(return_date_str, '%Y-%m-%d')
 
-#     # Get borrow_id, due_date, user_id using parameterized query
-#     borrow_record_query = """
-#         SELECT borrow_id, user_id, due_date
-#         FROM borrows
-#         WHERE book_id = %s
-#         ORDER BY borrow_id DESC
-#         LIMIT 1
-#     """
-#     cursor.execute(borrow_record_query, (book_id,))
-#     borrow_record = cursor.fetchone()
+        book_oid = ObjectId(book_id)
 
-#     if not borrow_record:
-#         cursor.close()
-#         conn.close()
-#         return jsonify({'error': 'No active borrow record found for this book'}), 404
+        # Find the latest borrow record for this book
+        borrow_record = db.borrows.find_one(
+            {"book_id": book_oid},
+            sort=[("_id", -1)]  # latest borrow
+        )
 
-#     borrow_id, user_id, due_date_obj = borrow_record
-#     due_date = due_date_obj if isinstance(due_date_obj, datetime) else datetime.strptime(str(due_date_obj), '%Y-%m-%d').date()
+        if not borrow_record:
+            return jsonify({'error': 'No active borrow record found for this book'}), 404
 
+        borrow_id = borrow_record["_id"]
+        user_id = borrow_record["user_id"]
+        due_date = borrow_record["due_date"]
 
-#     # Check for overdue
-#     overdue_status = return_date > due_date
-#     fine_amount_per_day = 1
-#     fine = 0.0
-#     if overdue_status:
-#         days_late = (return_date - due_date).days
-#         fine = round(days_late * fine_amount_per_day, 2)
+        # Check for overdue
+        overdue_status = return_date > due_date
+        fine = 0.0
+        if overdue_status:
+            days_late = (return_date - due_date).days
+            fine = round(days_late * 1.0, 2)  # €1 per day
 
+        # Insert return document
+        db.returns.insert_one({
+            "borrow_id": borrow_id,
+            "return_date": return_date,
+            "fine": fine,
+            "overdue_status": overdue_status
+        })
 
-#     # Insert into returns using parameterized query
-#     returns_query = """
-#         INSERT INTO returns (borrow_id, return_date, fine, overdue_status)
-#         VALUES (%s, %s, %s, %s)
-#     """
-#     cursor.execute(returns_query, (borrow_id, return_date, fine, overdue_status))
+        # Update book availability
+        db.books.update_one(
+            {"_id": book_oid},
+            {"$set": {"is_available": True}}
+        )
 
-#     # Update book availability
-#     update_book_query = """
-#         UPDATE books
-#         SET is_available = TRUE
-#         WHERE book_id = %s
-#     """
-#     cursor.execute(update_book_query, (book_id,))
+        # Decrement books_borrowed for user
+        db.users.update_one(
+            {"_id": user_id},
+            {"$inc": {"books_borrowed": -1}}
+        )
 
-#     # Update user's borrowed book count
-#     update_user_query = """
-#         UPDATE users
-#         SET books_borrowed = books_borrowed - 1
-#         WHERE user_id = %s
-#     """
-#     cursor.execute(update_user_query, (user_id,))
+    except Exception as e:
+        logging.error(f"Error during book return: {e}")
+        return jsonify({'error': 'An error occurred'}), 500
 
-
-#     conn.commit()
-#     conn.close()
-
-#     return redirect('/')
+    return redirect('/')
 
 
 # @app.route('/reset', methods=['POST'])
