@@ -94,11 +94,7 @@ def initialize_database():
 def initialise():
     initialize_database()
 
-    # return redirect('/')
-    return jsonify({
-        'status': 'success',
-        'message': f'Database initialised.',
-    }), 200
+    return redirect('/')
 
 
 # Book Cateloge
@@ -110,16 +106,16 @@ def index():
         return []
 
     try:
-        # 1. Fetch all books
+        # Fetch all books
         books_cursor = db.books.find()
         books = list(books_cursor)
 
-        # 2. Build mappings from authors, publishers, and genres
+        # Build mappings from authors, publishers, and genres
         authors = {str(a['_id']): a['name'] for a in db.authors.find()}
         genres = {str(g['_id']): g['name'] for g in db.genres.find()}
         publishers = {str(p['_id']): p['name'] for p in db.publishers.find()}
 
-        # 3. Fetch borrows to find latest borrow per book
+        # Fetch borrows to find latest borrow per book
         borrows = list(db.borrows.aggregate([
             { "$sort": { "borrow_date": -1 } },
             { "$group": {
@@ -129,14 +125,17 @@ def index():
         ]))
         latest_borrows = {str(b["_id"]): b["latest"] for b in borrows}
 
-        # 4. Get user information for borrows
+        # Get user information for borrows
         users = {str(u["_id"]): u for u in db.users.find()}
 
-        # 5. Compose book info
+        # Compose book info
         book_info = []
         for index, book in enumerate(books):
             book_id_str = str(book["_id"])
-            borrow = latest_borrows.get(book_id_str)
+
+            borrow = None
+            if not book["is_available"]:
+                borrow = latest_borrows.get(book_id_str)
 
             borrower = None
             borrow_date = None
@@ -160,13 +159,13 @@ def index():
                 "due_date": due_date,
             })
 
-        # 6. All users for dropdown
+        # All users for dropdown
         users_list = [
             { "user_id": str(user["_id"]), "name": user["name"] }
             for user in users.values()
         ]
 
-        # 7. Unavailable books
+        # Unavailable books for dropdown
         unavailable_books_cursor = db.books.find({ "is_available": False }).sort("title", 1)
         unavailable_books = [
             { "book_id": str(book["_id"]), "title": book["title"] }
@@ -367,7 +366,7 @@ def borrow_book():
         borrow_date = datetime.strptime(borrow_date_str, '%Y-%m-%d')
         due_date = borrow_date + relativedelta(months=1)
 
-        # 1. Insert borrow document
+        # Insert borrow document
         db.borrows.insert_one({
             "user_id": user_oid,
             "book_id": book_oid,
@@ -375,13 +374,13 @@ def borrow_book():
             "due_date": due_date
         })
 
-        # 2. Update book availability
+        # Update book availability
         db.books.update_one(
             {"_id": book_oid},
             {"$set": {"is_available": False}}
         )
 
-        # 3. Update user's borrowed book count
+        # Update user's borrowed book count
         db.users.update_one(
             {"_id": user_oid},
             {"$inc": {"books_borrowed": 1}}
@@ -455,11 +454,11 @@ def return_book():
     return redirect('/')
 
 
-# @app.route('/reset', methods=['POST'])
-# def reset_database():
-#     # Redirect to initialise
-#     return redirect('/init')
+@app.route('/reset', methods=['POST'])
+def reset_database():
+    # Redirect to initialise
+    return redirect('/init')
 
 
-# if __name__ == '__main__':
-#     app.run(debug=True)
+if __name__ == '__main__':
+    app.run(debug=True)
