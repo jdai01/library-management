@@ -18,3 +18,27 @@
     - View available books and current borrowings (`index.html`, `viewer.html`)
     - Borrow and return books with proper SQL-based state updates
     - Clear all data functionality also handled via SQL
+
+
+## Setup
+1. Switch to the `postgres` branch
+    ```bash
+    git switch postgres
+    ```
+
+2. Build and Start the App Containers
+    ```bash
+    docker compose up --build
+    ```
+
+3. Access Interfaces
+    - PostgreSQL Adminer Interface:  
+        View and manage database in the browser: [Click here](http://127.0.0.1:8080/?pgsql=library)
+
+    - Library App Interface:  
+        Access the main Flask application: [Click here](http://127.0.0.1:5001)
+
+4. Stop and Remove Containers
+    ```bash
+    docker compose down
+    ```
