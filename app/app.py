@@ -39,7 +39,7 @@ config.read('config.ini')
 # Database configuration
 MONGO_URI = config.get('DATABASE', 'MONGO_URI')
 DB_NAME = config.get('DATABASE', 'MONGO_DB')
-INIT_MONGO = os.path.join('schema', 'init_mongo.js')
+INIT_MONGO = "init_mongo.py"
 
 def get_db_connection():
     try:
@@ -77,14 +77,16 @@ def test_connection():
 def initialize_database():
     try:
         result = subprocess.run(
-            ["node", INIT_MONGO],
+            ["python3", INIT_MONGO],  # changed from "node" to "python3"
             capture_output=True,
             text=True,
             check=True
         )
         logging.info("MongoDB initialization output:\n%s", result.stdout)
-    except Exception as e:
+    except subprocess.CalledProcessError as e:
         logging.error("MongoDB initialization failed with exit code %s:\n%s", e.returncode, e.stderr)
+    except Exception as e:
+        logging.error("Unexpected error during MongoDB initialization:\n%s", str(e))
 
 
 # Route to serve the home page
