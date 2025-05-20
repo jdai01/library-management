@@ -7,3 +7,4 @@ SQLAlchemy
 flask_sqlalchemy
 python-dotenv
 python-dateutil
+pymongo

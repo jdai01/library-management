@@ -1,26 +1,29 @@
 # version: '3.8'
 services:
-    # database
-    db:
-        container_name: library_management_db
-        image: postgres
-        # hostname: localhost
+    # MongoDB
+    mongodb:
+        container_name: mongodb
+        image: mongo:latest
         ports:
-            - "5432:5432"
+            - "27017:27017"
         environment:
-            POSTGRES_USER: admin
-            POSTGRES_PASSWORD: secret
-            POSTGRES_DB: library
-        volumes: 
-            - postgres-data:/var/lib/postgresql/data 
+            MONGO_INITDB_ROOT_USERNAME: root
+            MONGO_INITDB_ROOT_PASSWORD: secret
+        volumes:
+            - mongodb_data:/data/db
         restart: unless-stopped
 
-    # admin2
-    adminer:
-        container_name: adminer
-        image: adminer
+    mongo-express:
+        image: mongo-express
+        container_name: mongo-express
+        environment:
+            ME_CONFIG_MONGODB_ADMINUSERNAME: root
+            ME_CONFIG_MONGODB_ADMINPASSWORD: secret
+            ME_CONFIG_MONGODB_SERVER: mongodb
         ports:
-            - 8080:8080
+            - "8081:8081"
+        depends_on:
+            - mongodb
 
     # flask
     app:  
@@ -29,7 +32,7 @@ services:
         volumes:
             - ./app:/app  
         depends_on:
-            - db  
+            - mongodb  
         ports:
             - "5001:5000"
         environment:
@@ -40,4 +43,4 @@ services:
         restart: unless-stopped
         
 volumes:
-    postgres-data: {}
+    mongodb_data: {}
