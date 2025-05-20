@@ -160,7 +160,6 @@ def index():
         unavailable_books_result = session.run("MATCH (b:Book) WHERE b.is_available = false RETURN b.book_id AS book_id, b.title AS title ORDER BY title")
         unavailable_books = [{"book_id": r["book_id"], "title": r["title"]} for r in unavailable_books_result]
 
-    logging.info(users)
     return render_template('index.html', info=books, users=users, unavailable_books=unavailable_books)
 
 
@@ -252,6 +251,14 @@ def viewer():
             record = result.single()
             if record:
                 info = {"Name": record["Name"]}
+        elif type_ == 'user':
+            result = session.run("""
+            MATCH (u:User {user_id: $id})
+            RETURN u.name AS Name, u.email as Email, u.tel_no as Tel_No
+            """, id=int(id_))
+            record = result.single()
+            if record:
+                info = {"Name": record["Name"], "Email": record["Email"], "Tel-No": record["Tel_No"]}
         else:
             return "Invalid type", 400
 
